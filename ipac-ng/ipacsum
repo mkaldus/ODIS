@@ -1,0 +1,1881 @@
+#!/usr/bin/perl
+#
+# $Id: ipacsum,v 1.23 2011/09/25 23:21:09 smsoft Exp $
+#
+# Summarize all IP accounting files from start to end time
+#
+# Copyright (C) 1997 - 2000 Moritz Both
+#		2001 - 2002 Al Zaharov
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+#
+# The author can be reached via email: moritz@daneben.de, or by
+# snail mail: Moritz Both, Im Moore 26, 30167 Hannover,
+#             Germany. Phone: +49-511-1610129
+#
+
+use 5.000;
+use Getopt::Long;
+use Sys::Hostname;
+use POSIX qw(strftime);
+use Time::Local;
+use Socket;
+use IO::Handle;
+
+
+BEGIN {
+	eval {require GD; import GD;};
+	$have_GD = $@ ? 0 : 1;
+}
+
+@moff = (0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334 );
+@mofg = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+@mons = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+	 "Jul", "Aug", "Sep", "Oct", "Nov", "Dec");
+@wday_short = ("Su", "Mo", "Tu", "We", "Th", "Fr", "Sa");
+@wday = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat");
+
+# =()<$datdir="@<ACCTDIR>@";>()=
+$datdir="/var/lib/ipac";
+# =()<$datdelim="@<DATDELIM>@";>()=
+$datdelim="#-#-#-#-#";
+# =()<$version="@<VERSION>@";>()=
+$version="1.34.2";
+# =()<$prefix="@<prefix>@";>()=
+$prefix="/usr";
+# =()<$exec_prefix="@<exec_prefix>@";>()=
+$exec_prefix="${prefix}";
+# =()<$INSTALLPATH="@<INSTALLPATH>@";>()=
+$INSTALLPATH="${exec_prefix}/sbin";
+$copyright="(C) 1997 - 2000 Moritz Both\n(C) 2001 - 2003 Al Zaharov";
+
+$me=$0;
+$me =~ s|^.*/([^/]+)$|$1|;
+$now = time;
+$fetchipac="$INSTALLPATH/fetchipac";
+$replace = 0;
+$exact = 0;
+$progression = 0;		# if 1, collect progressions (needs memory!)
+$graph = 0;			# make ascii graphs
+$png = undef;			# make png graphs
+$png_filename_prefix = undef;   # prefix png files with this prefix
+$rule_regex = ".*";		# match rules with this regex only
+$show_run_progression = 0;	# show % finished while running
+$fixed_quantity = undef;	# undef==off; can be one of [tgmk ]
+$storage_method = undef;	# the storage  method to pass to fetchipac
+
+$c_day = 24*60*60;
+$c_year = $c_day * 365.24;
+@C_QU = (1, 1024, 1048576, 1073741824, 1099511627776 );
+@C_QU_H = (1, 1000, 1_000_000, 1_000_000_000, 1_000_000_000_000 );
+@C_QUC= ('','K',  'M',     'G',        'T');
+
+# a list of possible x axis separator intervals and -alignments.
+@possible_interval = (
+	1, 2, 5, 10, 15, 20, 30,		# sec
+	60, 120, 300, 600, 900, 1200, 1800,	# 1,2,5,10,15,20,30 min
+	3600, 7200, 10800, 14400,		# 1,2,3,4 hours
+	21600, 43200,				# 6,12 hours
+	$c_day, $c_day*2, $c_day*5, $c_day*7,
+	$c_day*15, $c_day*30,			
+	$c_day*60, $c_year/4, $c_year/3,
+	$c_year/2, $c_year, $c_year*2,
+	$c_year*4, $c_year*5, $c_year*10, $c_year*20,
+	$c_year*25, $c_year*50, $c_year*100);	# hope this is enough
+
+# a list of possible time labels on x axis of png image with reasonable
+# time limits.
+# if duration is under... display time as...
+@png_time_labels = (
+	4*60,		'sprintf("%02d\'%02d\'\'", $m, $s)',
+	60*60,		'sprintf("%02d", $m)',
+	$c_day*2,	'sprintf("%02d:%02d", $h, $m)',
+	5*$c_day,	'sprintf("%s %02d", $WD, $h)',
+	50*$c_day,	'sprintf("%02d.", $D)',
+	2*$c_year,	'sprintf("%02d/%02d", $M, $D)',
+	1E37,		'sprintf("%04d", $Y)',
+);
+
+$graph_width = 55;
+$graph_interval = 60*60;	# seconds
+$graph_interval_explicit = 0;	# 1 if the user set it
+
+# png defaults.
+# =()<$png_width=@<PNG_WIDTH>@;>()=
+$png_width=500;
+# =()<$png_height=@<PNG_HEIGHT>@;>()=
+$png_height=150;
+# =()<$png_index_default_name = "@<PNG_INDEX_DEFAULT>@";>()=
+$png_index_default_name = "index.html";
+
+# png defaults.
+$png_x_sp = 50;
+$png_x_spr = 3;			# space on right side of png picture
+$png_y_sp = 15;
+$png_xaxis_sep_per_pix = 0.015;	# seperators on x axis per pixel
+$png_yaxis_sep_per_pix = 0.04;  # separators on y axis per pixel
+$png_yaxix_sep_width = 2;
+$png_xaxix_sep_height = 2;
+$png_font = GD::gdSmallFont;
+$png_font_offset_xax_x = -3;
+$png_font_offset_xax_y = 1;
+$png_font_offset_yax_x = -7;
+$png_font_offset_yax_y = -8;
+$png_average_character_width = 6;
+$png_average_character_width_vert = 4;
+$png_top_label_height = 15;
+$png_index = "0";			# wheather to generate index.html
+$png_normalized = 1;		# normalize png: show bps (not b per 
+				# graph_interval)
+$png_caption_in_index = 0;	# make max: and Average: in html index file
+$png_sort_by_bytes = 0;		# no sorting by default
+$png_sort_by_pkts = 0;		# no sorting by default
+$png_no_average = 0;		# dont draw dotted horizontal line with average
+$png_asis = 0;			# create 'asis' files (apache)
+$png_average_curve = 0;		# create 'average on n dots around' line
+$png_total = 0;			# show total in image
+$png_to_stdout = 0;		# send images to stdout
+
+# png defaults for other fonts.
+%png_defaults_fonts = (
+	TINY	=> [
+		\$png_x_sp,			30,
+		\$png_y_sp,			10,
+		\$png_xaxis_sep_per_pix, 	0.03,
+		\$png_yaxis_sep_per_pix, 	0.04,
+		\$png_font_offset_yax_y,	-3,
+		\$png_font_offset_xax_y,	2,
+		\$png_average_character_width,	3,
+		\$png_top_label_height,		10,
+	]
+);
+
+# calculate time zone offset in seconds - use difference of output of date
+# command and time function, round it
+my $tzoffset = time-timegm(localtime());
+# get time zone name
+$tzname = strftime "%Z", localtime;
+# get host name
+$hostname = &hostname;
+
+$starttime = 0 + $tzoffset;
+$endtime = $now;
+$starttime_explicit = 0;
+$endtime_explicit = 0;
+$machine_name = undef;
+
+# configure option parser if the Getopt::Long package is new enough to
+# support this.
+eval {&Getopt::Long::config("bundling_override")};
+$getopt_supports_bundling = $@ ? 0 : 1;
+
+# find out if we use gif or png images. GD versions <=1.19 support GIF,
+# >=1.20 make png images.
+if ($have_GD) {
+	$png_not_gif = ($GD::VERSION ge "1.20");
+	if ($png_not_gif) {
+		$image_type = "png";
+		$image_TYPE = "PNG";
+	}
+	else {
+		$image_type = "gif";
+		$image_TYPE = "GIF";
+	}
+}
+
+# parse command line. Option values are placed in $opt_X
+@GetOptionsControl= (
+	"d|dir=s", 
+#@ DEBUG CODE BEGIN
+	"debug=s"		=>\$debug,
+	"debug-current-time=s",
+#@ DEBUG CODE END
+	"e|endtime=s",
+	"fetchipac=s",		=>\$fetchipac,
+	"f|filter=s",
+	"l|sfilter=s",
+	"fixed-quantity=s"  	=>\$fixed_quantity,
+	"H|hostname=s"		=>\$hname,
+	# for backward compatibility, allow options to be named 'gif-*'.
+	"gif:s",
+	"gif-filename-prefix=s"=>\$png_filename_prefix,
+	"gif-asis",		\$png_asis,
+	"gif-average-curve=i" =>\$png_average_curve,
+	"gif-no-average" =>	\$png_no_average,
+	"gif-caption-in-index"=>\$png_caption_in_index,
+	"gif-height=i"	=>	\$png_height,
+	"gif-index:s"	=>	\$png_index,
+	"gif-normalize=i"=>	\$png_normalized,
+	"gif-total"	=>	\$png_total,
+	"gif-use-smallfont",
+	"gif-width=i"	=>	\$png_width,
+	"gif-to-stdout=i" =>	\$png_to_stdout,
+	"g|graph",
+	"h|help",
+	"human-kilo",
+	"z|omit-zero-lines",
+	"i|interval|intervall=s",
+	"png:s",
+	"png-filename-prefix=s"=>\$png_filename_prefix,
+	"png-asis",		\$png_asis,
+	"png-average-curve=i" =>\$png_average_curve,
+	"png-no-average" =>	\$png_no_average,
+	"png-caption-in-index"=>\$png_caption_in_index,
+	"png-sort-by-bytes" =>	\$png_sort_by_bytes,
+	"png-sort-by-pkts" =>	\$png_sort_by_pkts,
+	"png-height=i"	=>	\$png_height,
+	"png-index:s"	=>	\$png_index,
+	"png-normalize=i"=>	\$png_normalized,
+	"png-total"	=>	\$png_total,
+	"png-use-smallfont",
+	"png-width=i"	=>	\$png_width,
+	"png-to-stdout" =>	\$png_to_stdout,
+	"r|replace",
+	"s|starttime=s",
+	"show-run-progression"	=>	\$show_run_progression,
+	"storage-method=s"	=>	\$storage_method,
+	"t|timeframe=s",
+	"version",
+	"save-memory",
+	"x|exact",
+);
+
+if (! &GetOptions(@GetOptionsControl)) {
+	unless ($getopt_supports_bundling) {
+		warn "(Use a space character between option letters and ".
+			"their values. Or update to a\nnewer version of the ".
+			"Getopt::Long perl module.)\n";
+	}
+	die "$me: illegal option specified. \"$me --help\" for help.\n";
+}
+
+if ($opt_version || $opt_version) {
+	print <<EOF;
+ipacsum version $version
+EOF
+	exit 0;
+}
+
+if ($opt_h || $opt_h) {
+	&usage_png if (defined($opt_png) || defined($opt_gif));
+	&usage;
+}
+
+#@ DEBUG CODE BEGIN
+$now = &makeunixtime($opt_debug_current_time)
+	if ($opt_debug_current_time);
+#@ DEBUG CODE END
+
+if ($opt_s) {
+	$starttime_explicit=1;
+	$starttime=makeunixtime($opt_s);
+	$starttime = $now - &parse_cmd_time($opt_s) if (!$starttime);
+}
+if ($opt_e) {
+	$endtime_explicit=1;
+	$endtime=makeunixtime($opt_e);
+	$endtime = $now - &parse_cmd_time($opt_e) if (!$endtime);
+	$endtime -= 1;
+}
+
+$exact = 1 if ($opt_x || $opt_x);
+
+if ($opt_r || $opt_r) {
+	if (! defined($hname)) {
+		warn "Specifiying -r/--replace requires -H or --hostname.\n";
+		&usage;
+	}
+	$replace = 1;
+}
+
+$graph = 1 if ($opt_g || $opt_g);
+$opt_png = $opt_gif if (defined($opt_gif));
+$png = $opt_png if (defined($opt_png));
+$png = "." if (defined($png) && !$png);
+if ($png && !$have_GD) {
+	die "$me: cant draw png images because perl GD library not found\n";
+}
+
+if ($opt_png_use_smallfont || $opt_gif_use_smallfont) {
+	my($i);
+	$png_font = gdTinyFont;
+	for ($i=$[; $i <= $#{$png_defaults_fonts{TINY}}; $i+=2) {
+		${${$png_defaults_fonts{TINY}}[$i]} 
+				= ${$png_defaults_fonts{TINY}}[$i+1];
+	}
+}
+
+$progression = 1 if ($graph || $png);
+$rule_regex = $opt_f if ($opt_f);
+
+if ($opt_i) {
+	die "$me: invalid option --interval without --graph or --png\n" 
+		if (! $graph && ! $png);
+	$graph_interval=parse_cmd_time($opt_i);
+	$graph_interval_explicit = 1;
+}
+
+if ($opt_t) {
+	$starttime_explicit=$endtime_explicit=1;
+	&set_time_frame($opt_t);
+}
+
+if ($opt_human_kilo) {
+	@C_QU = @C_QU_H;
+}
+
+
+$datdir = $opt_d if ($opt_d);
+
+# fixed quantity?
+if (defined($fixed_quantity)) {
+	my $n;
+	$fixed_quantity =~ tr/a-z/A-Z/;
+	$fixed_quantity =~ s/^(.)/$1/;
+	for ($n=0; $n<=$#C_QUC; $n++) {
+		if ($fixed_quantity eq $C_QUC[$n]) {
+			$fixed_quantity = $n;
+			last;
+		}
+	}
+	if ($n > $#C_QUC) {
+		die "$me: option --fixed-quantity requires an argument '', K, M, G or T\n";
+	}
+}
+
+# options that we need to pass to fetchipac if we call it.
+$fetchipac_options = "--directory=$datdir";
+$fetchipac_options .= " --storage-method=$storage_method"
+	if (defined($storage_method));
+if ($hname || $hname) {
+        $hostname = $hname;
+	$fetchipac_options .= " -H $hostname";
+}
+$fetchipac_options .= " -f \"$opt_l\"" if ($opt_l || $opt_l);
+
+$endtime = $now if ($endtime > $now);
+$starttime = 0 if ($starttime < 0);
+$mystarttime = makemytime($starttime);
+$myendtime = makemytime($endtime);
+%rule_firstfile =  %rule_lastfile = ( );
+
+if ($png_average_curve) {
+	# initialize array of multipliers (weights)
+	@av_curv_weight = ( );
+	$av_curv_weight_sum = 0;
+	my($half) = $png_average_curve / 2;
+	for ($i=0; $i<=$png_average_curve; $i++) {
+		$av_curv_weight[$i] = (1-abs($i-$half)/$half)*2;
+		$av_curv_weight_sum += $av_curv_weight[$i];
+	}
+}
+
+# find out which timestamps we need to read.
+# remember newest timestamp before starttime so we know when data for
+# the first file starts
+# also remember oldest timestamp after end time
+$newest_timestamp_before_starttime = "";
+$oldest_timestamp_after_endtime = "";
+open(DATA, "$fetchipac $fetchipac_options --timestamps=$starttime,$endtime ".
+		"--machine-output-format|") || die "$me: cant run $fetchipac\n";
+# the first thing is the timestamp count
+$count=<DATA>;
+if ($count == 0) {
+	die "$me: no data found in given timeframe\n" if ($replace == 0);
+	exit 0;
+}
+while(<DATA>)
+{
+	if (/^(.)\s(\d+)$/) {
+		my $ts = $2;
+		if ($1 eq "-") {
+			$newest_timestamp_before_starttime=$ts;
+		}
+		elsif ($1 eq "+") {
+			$oldest_timestamp_after_endtime=$ts;
+		}
+		elsif ($1 eq "*") {
+			push(@timestamps, $ts);
+		}
+		else {
+			die "$me: illegal output from $fetchipac: \"$_\"\n";
+		}
+	}
+	else {
+		die "$me: illegal output from $fetchipac: \"$_\"\n";
+	}
+}
+close DATA;
+
+push(@timestamps, $oldest_timestamp_after_endtime) 
+	if ($oldest_timestamp_after_endtime);
+unshift(@timestamps, $newest_timestamp_before_starttime) 
+	if ($newest_timestamp_before_starttime);
+
+$rulenumber = 0;
+
+#@ DEBUG CODE BEGIN
+if ($debug =~ /timestamps_to_read/) {
+	print "DEBUG: timestamps to read=";
+	foreach (@timestamps) {
+		print "$_, ";
+	}
+	print "\n";
+}
+#@ DEBUG CODE END
+		
+# read all data we need and put the data into memory.
+&read_data;
+
+@rules_presorted = sort keys %rulenames;
+@rules_presorted = sort { $bytes{$b} <=> $bytes{$a} } keys %rulenames if $png_sort_by_bytes;
+@rules_presorted = sort { $pkts{$b} <=> $pkts{$a} } keys %rulenames if $png_sort_by_pkts;
+foreach (@rules_presorted) {
+	if (/$rule_regex/ && !($opt_z && $bytes{$_} eq "0")) {
+		push @rules_sorted, $_;
+	}
+}
+
+&make_one_record_from_many() if $replace;
+
+if (!$png_to_stdout) {
+	printf "IP accounting summary\nHost: $hostname / Time created: %s $tzname\n",
+		nice_date(makemytime($now));
+	printf "Data from %s $tzname to %s $tzname\n", 
+		nice_date($starttime_explicit 
+		    || !@timestamps ? $mystarttime : makemytime($timestamps[$[])), 
+		nice_date($myendtime);
+
+##	$incomplete_data=0;
+	foreach (@rules_sorted) {
+			&print_sum_line($_);
+	}
+##	if ($incomplete_data) {
+##		print "* = data incomplete, rule was not there all the time\n";
+##	}
+}
+if ($graph || $png) {
+	&out_graph($png);
+}
+
+
+##########################
+# END OF MAIN PROGRAM
+##########################
+
+sub print_sum_line {
+	my($f) = shift;
+	my($s) = " ";
+
+##	if ($glb_number_of_records > $rule_count{$f}) {
+##		$incomplete_data++;
+##		$s="*";
+##	}
+
+	printf("%s %s: %15s\n", 
+		$s,
+		$filter{$f}, 
+		&customized_number($bytes{$f})
+	);
+}
+
+# read all data (@timestmaps contains the timestamps, must be sorted!)
+# and put the data into our global memory data
+# structures. special care must be taken with data of the first and
+# the last timestamps we read, since we only want data which is from our
+# time frame. Furthermore, data from before and after this time frame
+# must be preserved in special data structures because we might replace
+# them (option --replace) and have to write extra data for these times
+# then.
+sub read_data {
+	my $run_s;
+	my $s;
+	my $i;
+	if ($show_run_progression) {
+		$| = 1;
+		$run_s = "";
+		printf "       (%d records total)\r", $#timestamps+1;
+	}
+
+	my $in_time = 0;
+	my $after_time = 0;
+
+	# global:
+	$glb_number_of_records = 0;
+
+	# feed the timestamp list to fetchipac on its stdin.
+	socketpair(CHILD, PARENT, AF_UNIX, SOCK_STREAM, PF_UNSPEC)
+			    or die "socketpair: $!";
+	CHILD->autoflush(1);
+	PARENT->autoflush(1);
+	my $pid = open(CHILD, "-|");
+	die "$me: can't fork: $!\n" unless defined $pid;
+	if ($pid == 0) {
+		# child
+		close CHILD;
+		open(FETCHIPAC, "|$fetchipac $fetchipac_options --record "
+				."--machine-output-format")
+			or die "$me: cant exec fetchipac\n";
+
+#this is much more efficient than the original code (Manfred Weihs)
+# and it adds more troubles than solves (Al Zakharov)
+                if ($timestamps[0] == $newest_timestamp_before_starttime) {
+                        print(FETCHIPAC $timestamps[1],"-",$timestamps[$count],"\n");
+                } else {
+                        print(FETCHIPAC $timestamps[0],"-",$timestamps[$count-1],"\n");
+		}
+		close(FETCHIPAC);
+		close(PARENT);
+		exit;
+	}
+	close PARENT;
+
+#@ DEBUG CODE BEGIN
+	print("DEBUG: forked, this is parent\n")
+		if ($debug =~ /fetchipac_call/);
+#@ DEBUG CODE END
+	my $laststamp = undef;
+	$laststamp = $newest_timestamp_before_starttime
+		if ($newest_timestamp_before_starttime);
+	$i = 0;
+	$i++ if ($laststamp);
+	while (<CHILD>) {
+#@ DEBUG CODE BEGIN
+		print("DEBUG: read from fetchipac: \"$_\"\n")
+			if ($debug =~ /fetchipac_call/);
+#@ DEBUG CODE END
+		if ($show_run_progression) {
+			my($s) = sprintf "%3d %%\r", 
+				int($i * 100 / ($#timestamps + 1));
+			if ($s != $run_s) {
+				print($s);
+				$run_s = $s;
+			}
+		}
+
+		# first line of fetchipac output: "ADD"
+		/^ADD\s*$/i or die "$me: bad line from fetchipac: $_\n";
+		# second line of fetchipac output: timestamp no_of_records
+		$_ = <CHILD> || last;
+		/^(\d+)\s(\d+)$/ or die "$me: bad line from fetchipac: $_\n";
+		my $timestamp = int $1;
+		my $number_of_records = int $2;
+		my $do_collect = 1;
+
+		if ($timestamp < $starttime) {
+			# this record is too old, we dont need the data.
+			# However, the timestamp gives us a clue on the 
+			# time period the next item covers.
+			$do_collect = 0;
+		}
+
+		my $irec;
+		# read each record
+		my $data = &read_data_record(CHILD, $number_of_records);
+
+		if ($do_collect && $in_time == 0) {
+			# the data is from after starttime. if it is the
+			# first one, split the data (if we know for how
+			# long this data is valid, and if $laststamp is not
+			# equal to $starttime in which case the split is
+			# redundant). If we don't have a clue about the 
+			# last file time before our first file was created,
+			# we do not know how much of the file data is in our
+			# time frame. we assume everything belongs to us.
+			$in_time = 1;
+#			if ($laststamp && $laststamp != $starttime) {
+			if ($laststamp && $laststamp != $newest_timestamp_before_starttime) {
+				my $newdata = &split_data($data,
+					$laststamp, $timestamp, $starttime);
+				$glb_data_before = $data;
+				$data = $newdata;
+				$laststamp = $starttime;
+			}
+		}
+
+		if ($timestamp > $endtime) {
+			# this data is too new, but the data in it may have
+			# begun within our time frame. (if endtime eq laststamp
+			# we do a redundant split here, too - it works for now
+			# and --replace relies on it, but it is ugly.)
+			if ($after_time == 0) {
+				$after_time = 1;
+				if ($laststamp) {
+					$glb_data_after =
+						&split_data($data,
+						$laststamp,$timestamp,$endtime);
+				} else {
+					$do_collect = 0;
+				}
+			} else {
+				$do_collect = 0;	# just too new.
+			}
+		}
+
+		if ($do_collect) {
+			&collect_data($data, $i);
+			$glb_number_of_records++;
+		}
+		$laststamp = $timestamp;
+		$i++;
+	}
+	print "                                          \r" 
+		if ($show_run_progression);
+	close CHILD;
+	wait;
+}
+
+# split the data in $1 (format as from read_data) into a pair of two
+# such data sets. The set referenced to as $1 will afterwards contain
+# the first part of the data, another set which is returned contains
+# the second part of the data.
+# interpret the data as having start time=$2 and end time=$3 and split
+# time=$4
+sub split_data {
+	my $data = shift;
+	my $mstart = shift;
+	my $mend = shift;
+	my $msplit = shift;
+
+	# calculate factors for multiplications
+	my $ust = $mstart;
+	my $uperiod = $mend - $ust;
+	my $usplit = $msplit - $ust;
+
+	if ($uperiod < 0) {
+		# hmmm? die Daten sind rueckwaerts???
+		$uperiod = -$uperiod;
+	}
+	my $fac1;
+	if ($usplit < 0) {
+		$fac1 = 0;
+	}
+	elsif ($usplit > $uperiod) {
+		$fac1 = 1;
+	}
+	else {
+		$fac1 = $usplit / $uperiod;
+	}
+
+	# $fac1 now says us how much weight the first result has.
+	# initialize the set we will return.
+	my @ret = ( );
+	
+	foreach $set (@$data) {
+		my ($rule, $bytes, $pkts) = @$set;
+		$$set[1] = int($bytes * $fac1 + 0.5);
+		$$set[2] = int($pkts * $fac1 + 0.5);
+		push(@ret, [ $rule, $bytes - $$set[1], $pkts - $$set[2] ]);
+	}
+	return \@ret;
+}
+
+# put data from one file into global data structures
+# must be called in correct sorted file name order to set rules_lastfile
+# and rules_firstfile (which are currently useless)
+# arguments: 
+# $1=index number of file; $2 = reference to array with data from file
+sub collect_data {
+	my($filedata, $ifile, $i);
+
+	$filedata = shift;
+	$ifile=shift;
+
+	for ($i=0; $i<=$#$filedata; $i++) {
+		my $set = $$filedata[$i];
+		my $rule = $$set[0];
+		my $bytes = $$set[1];
+		my $pkts = $$set[2];
+
+		# if rule first appeared in this file, initialize its
+		# life.
+		if (!defined($rulenames{$rule})) {
+			$rulenames{$rule}=$rulenumber++;
+			&init_filter_id($rule);
+		}
+
+		$bytes{$rule} += $bytes;
+		$pkts{$rule} += $pkts;
+		$rule_count{$rule}++;
+##		$rule_lastfile{$rule} = $file;
+		if ($progression) {
+			$$prog_bytes{$rule}[$ifile] += $bytes;
+			$$prog_pkts{$rule}[$ifile] += $pkts;
+			$prog_bytes_max{$rule} = $bytes
+				if ($prog_bytes_max{$rule} < $bytes);
+			$prog_pkts_max{$rule} = $pkts
+				if ($prog_pkts_max{$rule} < $pkts);
+		}
+	}
+}
+
+# initialize data variables for a new rule - if it is new
+sub init_filter_id {
+	my($s, $ifile) = @_;
+
+	if (!defined $bytes{$s}) {
+		$bytes{$s}=0;
+		$pkts{$s}=0;
+		$filter{$s} = sprintf("%-48s", $s);
+		$rule_firstfile{$s} = $timestamps[$ifile];
+		$rule_lastfile{$s} = "";
+##		$rule_count{$s} = 0;
+		if ($progression) {
+			$prog_pkts{$s} = [ ];
+			$prog_pkts_max{$s} = 0;
+			$prog_bytes{$s} = [ ];
+			$prog_bytes_max{$s} = 0;
+		}
+	}
+}
+
+# read data record from filehandle $1
+# number of records is $2
+# Return value: reference to array a of length n; 
+# 	n is the number of rules
+# 	each field in a is an array aa with 3 fields
+#	the fields in arrays aa are: [0]=name of rule; [1]=byte count;
+#	[2]=packet count
+# function does not use global variables
+sub read_data_record {
+	my($file, $number_of_records, $beforedata, $indata, $i, $irec);
+	my($pkts, $bytes, $rule);
+	my(@result);
+
+	$file=shift;
+	$number_of_records = shift;
+	$indata=0;
+	$beforedata=1;
+
+	for($irec = 0; $irec < $number_of_records; $irec++) {
+		$_ = <$file>;
+		chop;
+#@ DEBUG CODE BEGIN
+		print("DEBUG: read data from fetchipac: \"$_\" LF\n")
+			if ($debug =~ /fetchipac_call/);
+#@ DEBUG CODE END
+		/^\(\s*(.*)$/ or die "$me: bad line from fetchipac (expecting machine name): $_\n";
+		$machine_name = $1; 	# remember final machine name
+		while(<$file>) {
+#@ DEBUG CODE BEGIN
+			print("DEBUG: read data from fetchipac: \"$_\"\n")
+				if ($debug =~ /fetchipac_call/);
+#@ DEBUG CODE END
+			last if (/^\)$/);	# terminating line ')'
+			/^(\d+)\s(\d+)\s\|(.*)\|$/
+				or die "$me: bad line from fetchipac (expecting rule item): $_\n";
+			$bytes = $1;
+			$pkts = $2;
+			$rule = $3;
+			if ($rule =~ /$rule_regex/) {
+				push(@result, [ $rule, $bytes, $pkts]);
+			}
+		}
+	}
+	# read another emtpy line (data format consistency)
+	$_ = <$file>;
+	die "$me: bad data from fetchipac (expected emtpy line): $_\n"
+		if ($_ !~ /^$/);
+	\@result;
+}
+
+# given a string in format YYYYMMDD[hh[mm[ss]]], make unix time
+# use time zone offset $tzoffset (input=wall clock time, output=UTC)
+sub makeunixtime {
+	my($y, $m, $d, $h, $i, $e);
+	$s = shift;
+
+	$h=0; $i=0; $e=0;
+	if ($s =~ /^(\d\d\d\d)(\d\d)(\d\d)/) {
+		($y, $m, $d) = ($1, $2, $3);
+		if ($s =~ /^\d\d\d\d\d\d\d\d-?(\d\d)/) {
+			$h=$1;
+			if ($s =~ /^\d\d\d\d\d\d\d\d-?\d\d(\d\d)/) {
+				$i=$1;
+				if ($s =~ /^\d\d\d\d\d\d\d\d-?\d\d\d\d(\d\d)/) {
+					$e=$1;
+				}
+			}
+		}
+	}
+	else {
+		return 0;
+	}
+
+	$y-=1970;
+	$s = (($y)*365) + int(($y+2)/4) + $moff[$m-1] + $d-1;
+	$s-- if (($y+2)%4 == 0 && $m < 3);
+	$s*86400 + $h*3600 + $i*60 + $e + $tzoffset;
+}
+
+# return the given unix time in localtime in "my" time format
+sub makemytime {
+	my($s)=shift;
+
+	my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) =
+                                                 localtime($s);
+	# ugly side effect of this function: set a global scalar
+	# containing the day of week number.
+	$mmt_wday = $wday;
+	return sprintf("%04d%02d%02d-%02d%02d%02d", 1900+$year, $mon+1, $mday,
+		$hour, $min, $sec);
+}
+
+# parse time as a duration
+# syntax is
+# cmd_time:		seconds | cmd_time_with_size
+# cmd_time_with_size:	cmd_time_atom | cmd_time_with_size cmd_time_atom
+# cmd_time_atom:	number size
+# size:			"s"|"m"|"h"|"D"|"W"|"M"|"Y"
+#			(sec, min, hours, Days, Weeks, Months, Years)
+# seconds:		number
+# return number of seconds
+sub parse_cmd_time {
+	my($sec) =0;
+	$_=shift;
+
+	return $_ if (/^\d+$/);
+
+	while($_) {
+		if (! /^(\d+)\s?([smhDWMY])(.*)$/) {
+			die "$me: syntax error in time (duration)\n";
+		}
+		$_=$3;
+		if ($2 eq "s") {
+			$sec += $1;
+		}
+		elsif ($2 eq "m") {
+			$sec += $1*60;
+		}
+		elsif ($2 eq "h") {
+			$sec += $1*60*60;
+		}
+		elsif ($2 eq "D") {
+			$sec += $1*60*60*24;
+		}
+		elsif ($2 eq "W") {
+			$sec += $1*60*60*24*7;
+		}
+		elsif ($2 eq "M") {
+			$sec += $1*60*60*24*30;
+		}
+		elsif ($2 eq "Y") {
+			$sec += $1*60*60*24*365;
+		}
+	}
+	$sec;
+}
+
+sub set_time_frame {
+	my($opt_t) = shift;
+	my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = 
+							    localtime($now);
+
+	if ($opt_t =~ /^this\s*hour/i) {
+		$opt_t = "the hour 0 hours ago";
+	}
+	elsif ($opt_t =~ /^last\s*hour/i) {
+		$opt_t = "the hour 1 hour ago";
+	}
+	elsif ($opt_t =~ /^today/i) {
+		$opt_t = "the day 0 days ago";
+	}
+	elsif ($opt_t =~ /^yesterday/i) {
+		$opt_t = "the day 1 day ago";
+	}
+	elsif ($opt_t =~ /^the\s*day\s*before\s*yesterday/i) {
+		$opt_t = "the day 2 days ago";
+	}
+	elsif ($opt_t =~ /^this\s*week/i) {
+		$opt_t = "the week 0 weeks ago";
+	}
+	elsif ($opt_t =~ /^last\s*week/i) {
+		$opt_t = "the week 1 week ago";
+	}
+	elsif ($opt_t =~ /^the\s*week\s*before\s*last\s*week/i) {
+		$opt_t = "the week 2 weeks ago";
+	}
+	elsif ($opt_t =~ /^this\s*month/i) {
+		$opt_t = "the month 0 months ago";
+	}
+	elsif ($opt_t =~ /^last\s*month/i) {
+		$opt_t = "the month 1 month ago";
+	}
+	elsif ($opt_t =~ /^this\s*year/i) {
+		$opt_t = "the year 0 years ago";
+	}
+	elsif ($opt_t =~ /^last\s*year/i) {
+		$opt_t = "the year 1 year ago";
+	}
+
+	if ($opt_t =~ /^the hour (\d+) hours? ago/i) {
+		$i=$1;
+		my($thishour)=makeunixtime(sprintf("%04d%02d%02d%02d0000", 
+			1900+$year, $mon+1, $mday, $hour));
+		$starttime=$thishour - 60*60 * $i;
+		$endtime = $thishour - 60*60 * ($i-1);
+	}
+	elsif ($opt_t =~ /^the day (\d+) days? ago/i) {
+		$i=$1;
+		my($thismorning)=makeunixtime(sprintf("%04d%02d%02d000000", 
+			1900+$year, $mon+1, $mday));
+		$starttime=$thismorning - 60*60*24 * $i;
+		$endtime=$thismorning - 60*60*24 * ($i-1);
+	}
+	elsif ($opt_t =~ /^the week (\d+) weeks? ago/i) {
+		$i=$1;
+		$mday = $mday-($wday >0 ? $wday-1 : 6);
+		if ($mday < 1) {
+			$mon--;
+			if ($mon < 0) {
+				$mon += 12;
+				$year--;
+			}
+			$mday += $mofg[$mon];
+		}
+		my($monday)=makeunixtime(sprintf("%04d%02d%02d000000", 
+			1900+$year, $mon+1, $mday));
+		$starttime=$monday - 60*60*24*7 * $i;
+		$endtime=$monday- 60*60*24*7 * ($i-1);
+	}
+	elsif ($opt_t =~ /^the month (\d+) months? ago/i) {
+		$mon = $mon - $1;
+		while ($mon < 0) {
+			$year--;
+			$mon += 12;
+		}
+
+		$starttime=makeunixtime(sprintf("%04d%02d01000000", 
+			1900+$year, $mon+1));
+		$endtime=$starttime + 60*60*24*$mofg[$mon];
+		$endtime += 60*60*24 if ((1900+$year)%4 ==0 && $mon==1);
+	}
+	elsif ($opt_t =~ /^the year (\d+) years? ago/i) {
+		$i=$1;
+
+		$starttime=makeunixtime(sprintf("%04d0101000000", 
+			1900+$year-$i));
+		$endtime=makeunixtime(sprintf("%04d0101000000", 
+			1900+$year-$i+1));
+	}
+	elsif ((!$opt_t =~ /^ever/i) || ($opt_t ne "")) {
+		die "$me: Unknown time frame: \"$opt_t\"\n";
+	}
+	$endtime -= 1;
+}
+
+sub nice_number {
+	my($n)=shift;
+
+	$done=0;
+	for ($i=$#C_QU; $i>0 && !$done; $i--) {
+		if ($n >= $C_QU[$i]) {
+			$n = sprintf("%d%s", int($n/$C_QU[$i]+.5), $C_QUC[$i]);
+			$done = 1;
+		} 
+	}
+
+	$n;
+}
+
+sub customized_number {
+	my $n = shift;
+
+	if ($exact) {
+	}
+	elsif (defined($fixed_quantity)) {
+		$n = int($n/$C_QU[$fixed_quantity]+.5);
+		$n .= $C_QUC[$fixed_quantity] if ($C_QUC[$fixed_quantity]);
+	}
+	else {
+		$n = &nice_number($n);
+	}
+	$n;
+}
+
+# format date in format YYYYMMDD-HHMMSS nicely.
+sub nice_date {
+	$s = shift;
+	my($wday);
+
+	$s =~ s@^(\d\d\d\d)(\d\d)(\d\d)-(\d\d)(\d\d)(\d\d)@$1/$2/$3 $4:$5:$6@;
+	$s;
+}
+
+# Format a number representing seconds into a nice time (duration).
+sub nice_time {
+	my($s) = shift;
+	my($t, $i, $mz);
+
+	$t = "";
+	$i = int($s / 31557600);
+	$s = $s % 31557600;
+	$mz = "s" if ($i > 1);
+	$t = "$i year$mz " if ($i);
+	$i = int($s / 86400);
+	$s = $s % 86400;
+	$mz = "s" if ($i > 1);
+	$t = "$t$i day$mz " if ($i);
+	$i = int($s / 3600);
+	$s = $s % 3600;
+	$mz = "s" if ($i > 1);
+	$t = "$t$i hour$mz " if ($i);
+	$i = int($s / 60);
+	$s = $s % 60;
+	$t = "$t$i min " if ($i);
+	$t = "$t$s sec" if ($s);
+
+	$t;
+}
+
+# replace: summarize all data from within time frame into one record
+# generate extra records for times before and after the time frame
+# if we have such data
+# try to be atomic and clean up in case of failures.
+# collect commands for fetchipac in an array
+sub make_one_record_from_many {
+	my @commands = ();
+
+	return if (! @timestamps);
+
+	# collect timestamps to be unlinked. Unlink all but 
+	# $newest_timestamp_before_starttime and
+	# $oldest_timestamp_after_endtime
+	my $ok = 1;
+	my($timestamp1, $timestamp2, $timestamp3);
+	foreach(@timestamps) {
+		next if ($_ eq $newest_timestamp_before_starttime);
+		next if ($_ eq $oldest_timestamp_after_endtime);
+		push(@commands, "DELETE $_\n");
+	}
+
+	if ($ok && $#commands < $[) {
+		# no records to summarize.
+		return;
+	}
+
+	# the new timestamp number is equal to end time.
+	if ($ok) {
+		if ($starttime_explicit) {
+			$timestamp1 = $starttime;
+		} else {
+			$timestamp1 = $timestamps[0];
+		}
+		if ($timestamp1 eq $newewst_timestamp_before_starttime) {
+			$timestamp1 = $timestamps[1];
+		}
+		my $data = &sum_file;
+		my $record_data = &ascii_data_record($data);
+		push(@commands, "ADD\n$timestamp1 1\n" . $record_data . "\n");
+	}
+
+	# write two more records:
+#	if ($ok) {
+#		# 1) before starttime, if $glb_data_before
+#		if (defined($glb_data_before)) {
+#			$timestamp2 = $starttime;
+#			$timestamp2 = $newewst_timestamp_before_starttime;
+#			my $record_data = &ascii_data_record($glb_data_before);
+#			push(@commands, "ADD\n$timestamp2 1\n$record_data\n");
+#		#		"(pre-timeframe split data part)");
+#		}
+#	}
+
+#	if ($ok) {
+#		# 2) after endtime, if $glb_data_after
+#		if (defined($glb_data_after)) {
+#			$timestamp3 = $oldest_timestamp_after_endtime;
+#			my $record_data = &ascii_data_record($glb_data_after);
+#			push(@commands, "ADD\n$timestamp3 1\n$record_data\n");
+#		#		"(post-timeframe split data part)");
+#		}
+#	}
+
+	# execute everything, scanning for errors.
+#	if ($debug =~ /replace_actions/) {
+		print @commands; 
+#		return;
+#	}
+	pipe(PREAD, PWRITE);
+	my $pid = fork();
+	die "$me: can't fork: $!\n" if (!defined($pid));
+	if ($pid == 0) {
+		# child
+		close PWRITE;
+		close STDIN;
+		open(STDIN, "<&PREAD") || die "$me: cant redirect stdin to pipe: $!\n";
+		open(FETCHIPAC, "$fetchipac $fetchipac_options --batch|")
+			|| die "$me: cant run fetchipac in batch mode: $!\n";
+		my @out;
+		my $ret = 0;
+		while(<FETCHIPAC>) {
+			push(@out, $_);
+			if (/ERROR/) {
+				$ret = 1;
+				last;
+			}
+		}
+		close FETCHIPAC;
+		close PREAD;
+		exit $ret;
+	}
+	# parent
+	close PREAD;
+
+	foreach(@commands) {
+		print(PWRITE $_);
+	}
+	close PWRITE;
+	
+	wait;
+	die "$me: fetchipac reported error on replace operation\n"
+		if (($? >> 8 ) != 0);
+}
+
+# from the global data, generate one record of data in the format of
+# read_file
+sub sum_file {
+	my $rule;
+	my @result = ( );
+	# sort rules by rule number (sequence of appearance)
+	foreach $rule (sort { $rulenames{$a} <=> $rulenames{$b} } 
+				keys %rulenames) {
+		push(@result, [ $rule, $bytes{$rule}, $pkts{$rule} ]);
+	}
+	return \@result;
+}
+
+## create a data record in ascii format
+# @param $1 the data
+# @return the data record string or undef in case of error
+sub ascii_data_record {
+	my $data = shift;
+
+	# we "print" the record in memory
+	my($text);
+	# push(@text, sprintf("# ipac $version summary file generated %s\n", makemytime(time)));
+	# push(@text, sprintf("# source files: %s to %s\n", $files[0], 
+	#			$files[$#files]));
+	# push(@text, "# $comment\n") if (defined($comment));
+	# push(@text, "#\n");
+
+	#  machine name
+	$text .= "( $machine_name\n";
+
+	my $set;
+	foreach $set (@$data) {
+		$text .= "$$set[1] $$set[2] \|$$set[0]\|\n";
+	}
+	$text .= ")\n";		# sub record delimiter
+	return $text;
+}
+
+# find identical rules in $1 and make them one by adding the counters.
+sub compress_data_record {
+	my $data = shift;
+	my $rule;
+	my $set;
+	my @newdata;
+	my $set2;
+
+	foreach $set (@$data) {
+		$rule = $$set[0];
+		next if (!defined($rule));
+		my $bytes = 0;
+		my $pkts = 0;
+		foreach $set2 (@$data) {
+			if ($rule eq $$set2[0]) {
+				$bytes += $$set2[1];
+				$pkts += $$set2[2];
+				$$set2[0] = undef;
+			}
+		}
+		push(@newdata, [ $rule, $bytes, $pkts ]);
+	}
+	@$data = @newdata;
+}
+
+sub out_graph {
+	my($png) = shift;
+	my(@rules_filtered, @rules_filtered_data, $i, $lst);
+
+	# Do preparations for all graphs.
+	$startt_graph = $starttime;
+	$startt_graph = $timestamps[$[]
+			if (!$starttime_explicit && @timestamps);
+
+	# IF we make a png and we show throughput instead of absolute values
+	# (which is the normal case), AND
+	#	the user has not set --interval, OR
+	# 	$graph_inverval is smaller than one pixel would be
+	# THEN
+	# set $graph_interval to one pixel.
+	$i = $png_width-$png_x_sp-$png_x_spr; # actual x pixel number
+	if ($png && $png_normalized && (
+			($endtime - $startt_graph)/$graph_interval > $i
+			|| ! $graph_interval_explicit)
+			) {
+		$graph_interval = ($endtime-$startt_graph) / $i;
+	}
+
+	# Calculate HTTP Expires: Header.
+	# if $endtime is $now, set it to $now + $graph_interval.
+	# if it is not $now, omit it.
+	undef($expires);
+	if ($endtime == $now) {
+		$expires = &http_time($now + $graph_interval);
+	}
+	# HTTP Last-Modified (asis)
+	$last_modified = &http_time($now) if ($png_asis);
+	
+	$lst = "";
+	foreach $rule (@rules_sorted) {
+		next if ($rule eq $lst);
+		$lst = $rule;
+		push(@rules_filtered, $rule);
+		my($graph_data) = &single_graph($rule, $png);
+		push(@rules_filtered_data, $graph_data);
+	}
+	&out_index_html(\@rules_filtered, \@rules_filtered_data)
+		if ($png && ($png_index ne "0"));
+}
+
+sub single_graph {
+	my($rule) = shift;
+	my($png) = shift;
+	my($max, $i, $ifile, $inter_st, $inter_end, $value, $iut, $oldiut);
+	my($sum, $avg, @values, @valtime, $bytes, %dat);
+
+	print "Graph for rule \"$rule\"\n" unless $png;
+	$max=0;
+	$sum = 0;
+
+	$inter_st = $startt_graph;
+	$inter_end = $inter_st + $graph_interval;
+	$value=0;
+	$iut=$inter_st;
+
+	for ($ifile=0; $ifile<=$#timestamps; $ifile++) {
+		if (defined($$prog_bytes{$rule}[$ifile])) {
+			$bytes = $$prog_bytes{$rule}[$ifile];
+		} else {
+			$bytes = 0;
+		}
+
+		# while the timestamp is before start time, skip
+		next if ($timestamps[$ifile] <= $startt_graph);
+
+		$oldiut = $iut;
+		$iut = $timestamps[$ifile];
+
+		# if the file is younger than the end of the time frame
+		# we are examining, split the count.
+		while ($iut > $inter_end) {
+			# if the timestamp is from after our overall end time,
+			# pretend it is from end time. (Data has been adjusted
+			# in read_data() anyway.)
+			if ($iut > $endtime) {
+				$iut = $endtime;
+			}
+			# number of bytes still in current time frame
+			$i = ($bytes != 0 ? 
+				int($bytes*($inter_end-$oldiut)
+						/($iut-$oldiut)+.5)
+				: 0);
+			$value += $i;
+			push(@values, $value);
+			$max = $value if ($value > $max);
+			$sum += $value;
+			$value=0;
+			$oldiut=$inter_end;
+			$inter_st = $inter_end;
+			$inter_end += $graph_interval;
+			$bytes -= $i;
+		}
+		$value += $bytes;
+	}
+	# no: the value will be inaccurate push(@values, $value);
+	push(@values, $value);
+	$max = $value if ($value > $max);
+	$sum += $value;
+	$avg = @values ? ($sum / ($#values + 1)) : 0;
+	%dat = ( 'max' => $max, 'min' => 0, 'sum' => $sum, 'avg' => $avg );
+
+	if ($png) {
+		my($i) = &draw_png($png_width, $png_height, \%dat, 
+			\@values,
+			$startt_graph, $rule);
+		my($filename)= $png_asis ? "$rule.asis" : "$rule.$image_type";
+		$filename = &good_filename($filename);
+		if (-d $png) {
+			if ($png_filename_prefix ne "") {
+				$filename="$png/$png_filename_prefix$filename";
+			} else {
+				$filename="$png/$filename";
+			}
+		}
+		if (!$png_to_stdout) {
+			open(OUT, ">$filename") || die "$me: can't open \"$filename\": $!\n";
+#		} else {
+#			print "$filename\n";
+		}
+		if ($png_asis) {
+			if ($png_to_stdout) {
+				print "Status: 200 OK\n";
+				print "Expires: $expires\n" if ($expires);
+				print "Last-Modified: $last_modified\n";
+				printf "Content-Length: %d\n", length($i);
+				print "Content-Type: image/$image_type\n";
+				print "\n";
+			} else {
+				print OUT "Status: 200 OK\n";
+				print OUT "Expires: $expires\n" if ($expires);
+				print OUT "Last-Modified: $last_modified\n";
+				printf OUT "Content-Length: %d\n", length($i);
+				print OUT "Content-Type: image/$image_type\n";
+				print OUT "\n";
+			}
+		}
+		if (!$png_to_stdout) {
+			binmode OUT;
+			print OUT $i;
+			close OUT;
+		} else {
+			print "$i\n";
+		}
+	}
+	else {
+		&draw_ascii_graph(\@values, $max, $startt_graph);
+	}
+	# return some interesting data about the graph.
+	return \%dat;
+}
+
+sub good_filename {
+	my($s) = shift;
+	$s =~ s@[\s\\/\|\>\<]@_@g;
+	$s;
+}
+
+sub draw_ascii_graph {
+	my($values, $max, $startt_graph) = @_;
+	my($s, $i, $inter_st);
+
+	printf "time          bytes 0%s%5s\n", string(" ", $graph_width-6), 
+			nice_number($max);
+
+	$inter_st=$startt_graph;
+	for ($i=0; $i<=$#{$values}; $i++) {
+		$s= $max ? string("*", 
+			int(($$values[$i]/$max)*$graph_width+.5)
+			) : "";
+		printf "%s %s\n", nice_date(makemytime($inter_st)), $s;
+		$inter_st += $graph_interval;
+	}
+}
+
+# repeat string n times
+sub string {
+	my($s, $i);
+
+	$s="";
+	for ($i=1; $i<$_[1]; $i++) {
+		$s .= $_[0];
+	}
+	$s;
+}
+
+sub draw_png {
+	return 0 unless $have_GD;
+	my($xsiz, $ysiz, $dat, $values, $startt_graph, 
+			$rule) = @_;
+
+	my($maxval) = $$dat{'max'};
+	my($minval) = $$dat{'min'};
+	my($im) = new GD::Image($xsiz, $ysiz);
+	# hack to leave pixels blank at the right border.
+	$xsiz -= $png_x_spr;
+
+	my($backg) = $im->colorAllocate(224,224,224);
+	my($white) = $im->colorAllocate(255,255,255);
+	my($black) = $im->colorAllocate(0,0,0);
+	my($blue)  = $im->colorAllocate(0,0,255);
+	my($green) = $im->colorAllocate(0,128,0);
+	my($red)   = $im->colorAllocate(255,0,0);
+	my($png_arc_size)=1;
+
+	my($x, $y, $i, $s, $xstep, $ymulti, $arc_color, $line_color,
+		$font_color, $title_color, $axle_color, $x1, $y1, $duration,
+		$normalize_factor, $avg_color);
+
+	$im -> interlaced(1);
+
+	$maxval = 1 unless $maxval;
+	$png_arc_size = 5 unless $png_normalized;
+	# normalize_factor is a multiplier for Y values to get user
+	# caption values.
+	$normalize_factor = $png_normalized?$png_normalized/$graph_interval : 1;
+	$$dat{'max_caption'} = $maxval * $normalize_factor;
+	$$dat{'avg_caption'} = $$dat{'avg'} * $normalize_factor;
+	# division by 0 in the following line? FIXME
+	$xstep = ($xsiz-$png_x_sp) / ($#{$values} + 1);
+	$ymulti = ($ysiz-$png_y_sp-$png_top_label_height) / ($maxval-$minval);
+	$arc_color = $black;
+	$line_color = $black;
+	$font_color = $blue;
+	$axle_color = $blue;
+	$title_color = $green;
+	$avg_color = $green;
+	$avg_line_color = $red;
+
+	# draw axles.
+	$im->line($png_x_sp, $ysiz-$png_y_sp, $xsiz, $ysiz-$png_y_sp, 
+			$axle_color);
+	$im->line($png_x_sp, $png_top_label_height, $png_x_sp, 
+			$ysiz-$png_y_sp, $axle_color);
+	$s = $png_normalized ? $png_normalized : $graph_interval;
+	if ($s == 1) {
+		$s = "bytes / sec";
+	}
+	elsif ($s == 8) {
+		$s = "bit / sec";
+	}
+	else {
+		$s = "bytes / $s sec";
+	}
+	&centerStringUp($im, $s, $png_font, 1, 
+				$png_top_label_height,
+				$ysiz, $font_color);
+
+	# draw total average line if requested.
+	unless ($png_no_average) {
+		$y = ($ysiz - $png_y_sp) - $$dat{'avg'} * $ymulti;
+		$im -> GD::Image::dashedLine($png_x_sp, $y, $xsiz, $y, 
+				$avg_color);
+	}
+
+	# compute optimal interval of labels.
+	unless (defined($x_labels)) {
+		$x_labels = &optimal_label_interval_time(
+			int($png_xaxis_sep_per_pix * ($xsiz-$png_x_sp) + 0.5), 
+			$#{$values}+1, $startt_graph);
+	}
+	my($y_lab_int) = &optimal_label_interval_2(
+			int($png_yaxis_sep_per_pix * 
+			($ysiz-$png_y_sp-$png_top_label_height) + 0.5), 
+			$maxval*$normalize_factor, 1);
+
+	# draw labels.
+	# X AXIS
+	$y = $ysiz - $png_y_sp;
+	# time we cover in seconds
+	$duration = ($#{$values}+1) * $graph_interval;
+	# $%x_labels: keys are times, values are label strings
+	foreach $i (keys %$x_labels) {
+		$x = $png_x_sp + (($i - $startt_graph)/$duration *
+				($xsiz - $png_x_sp));
+		$im->line($x, $y - $png_xaxix_sep_height,
+				$x, $y + $png_xaxix_sep_height, $axle_color);
+		$im->string($png_font, 
+				$x + $png_font_offset_xax_x -
+					length($$x_labels{$i}) / 2 *
+					$png_average_character_width, 
+				$y + $png_font_offset_xax_y,
+				$$x_labels{$i}, $font_color);
+	}
+		
+	# Y AXIS.
+	$x = $png_x_sp;
+	for ($i = 0; $i <= $maxval * $normalize_factor; $i += $y_lab_int) {
+		$y = ($ysiz-$png_y_sp) - 
+			int(($i / $normalize_factor * $ymulti + 0.5));
+		$im->line($x - $png_yaxix_sep_width, $y,
+				$x + $png_yaxix_sep_width, $y, $axle_color);
+		$s = &nice_number($i);
+		$im->string($png_font, 
+				$png_x_sp - $png_average_character_width*
+				length($s)+$png_font_offset_yax_x, 
+				$y + $png_font_offset_yax_y,
+				$s, $font_color);
+	}
+
+	# put the first dot
+	$i = $[;
+	$x = $png_x_sp;
+	$y = ($ysiz - $png_y_sp) - $$values[$i++] * $ymulti;
+	$im -> GD::Image::arc($x, $y, $png_arc_size, $png_arc_size,
+			0, 360, $black) 
+		if ($png_arc_size >1);
+	
+	# put all lines and dots.
+	$yavg = undef;
+	my(@av_line);
+	my($gal_offset) = int($png_average_curve/2+.5);
+	while($i <= $#{$values}) {
+		$x1 = $x + $xstep;
+		if ($png_average_curve) {
+			push(@av_line, $$values[$i]);
+			shift(@av_line) if ($#av_line > $png_average_curve);
+			if ($#av_line == $png_average_curve) {
+				# draw it.
+				my($ia);
+				my($asum)=0;
+				for ($ia=0; $ia<$png_average_curve+1;
+								$ia++) {
+					$asum += $av_line[$ia] *
+						$av_curv_weight[$ia];
+				}
+				$yavg1 = ($ysiz-$png_y_sp)
+						-($asum/$av_curv_weight_sum)
+						*$ymulti;
+				if ($yavg) {
+					$im-> GD::Image::line($x-$gal_offset, 
+							$yavg,
+							$x1-$gal_offset, 
+							$yavg1, 
+							$avg_line_color);
+				}
+				$yavg = $yavg1;
+			}
+
+		}
+		$y1 = ($ysiz - $png_y_sp) - $$values[$i++] * $ymulti;
+		$im -> GD::Image::arc($x1, $y1, $png_arc_size, $png_arc_size,
+				0, 360, $arc_color)
+			if ($png_arc_size >1);
+		$im -> GD::Image::line($x, $y, $x1, $y1, $line_color);
+		$x = $x1;
+		$y = $y1;
+	}
+
+	# put the title string.
+	$s = &nice_date(&makemytime($startt_graph)); # sets &mmt_wday
+	$s=sprintf("%s Start: %s %s max: %s avg: %s", $rule, 
+			$wday[$mmt_wday], $s, 
+			&nice_number(int($$dat{'max_caption'}+0.5)),
+			&nice_number(int($$dat{'avg_caption'}+0.5)));
+	$s .= sprintf(" tot: %s", &nice_number($bytes{$rule}))
+			if ($png_total);
+	$x1 = length($s)*$png_average_character_width;
+	$x = int($xsiz/2 - $x1/2+0.5);
+	$im->string($png_font, $x, 0, $s, $title_color);
+
+	return ($png_not_gif) ? $im->png : $im->gif;
+}
+
+sub optimal_label_interval {
+	my($want_separators, $max, $useKM) = @_;
+	my($mat, $exp); 
+
+	return 1 if (! $max || ! $want_separators);
+	$mat = $max / $want_separators;
+	$exp=0;
+	# stupid way, i am not a mathematican.
+	while ($mat >= 10) {
+		$mat = $mat / 10;
+		$exp++;
+	}
+	while ($mat < 1) {
+		$mat = $mat * 10;
+		$exp--;
+	}
+	# $mat is now between 1 and 9.99...
+	if ($mat < 1.7) {
+		$mat = 1;
+	}
+	elsif ($mat < 3.7) {
+		$mat = 2.5;
+	}
+	elsif ($mat < 7.5) {
+		$mat = 5;
+	}
+	else {
+		$mat = 10;
+	}
+	$mat * (10 ** $exp);
+}
+
+# compute a list of time labels for the x axix. Make about $want_separators
+# labels. First column is of time $startt_graph, there are $n values.
+sub optimal_label_interval_time {
+	my($want_separators, $n, $startt_graph) = @_;
+	my($duration, $sps, $div, $interval, $firsttime, $i, %result);
+	my($Y, $M, $D, $h, $m, $s, $pfunc);
+
+	# We need to find out what the best label notation and the best label
+	# interval is. The magic measure is "seconds per separator", sps.
+	$duration = $n * $graph_interval;
+	$sps = $duration / $want_separators;
+
+	# find the closest value from @possible_interval. Linear search.
+	for ($i=$[; $i<=$#possible_interval && $sps > $possible_interval[$i]; 
+			$i++) { }
+	$i-- if ($i>$[ && 
+		$possible_interval[$i]-$sps > $sps-$possible_interval[$i-1]);
+	
+	$interval = $possible_interval[$i];
+
+	for ($i=$[; $i<=$#png_time_labels; $i+=2) {
+		last if ($png_time_labels[$i] > $duration);
+	}
+	$pfunc = $png_time_labels[$i+1];
+
+	# this is the first time.
+	$firsttime = int(($startt_graph + $interval - $tzoffset) / $interval
+				- 0.001) 
+			* $interval + $tzoffset;
+
+	# generate a list of labels.
+	$n="";
+	for ($i = $firsttime; $i < $startt_graph+$duration; $i += $interval) {
+		($s,$m,$h,$D,$M,$Y,$WD) = localtime($i);
+		$WD = $wday_short[$WD];
+		$M++;
+		$Y+=1900;
+		$result{$i} = eval($pfunc);
+		if ($result{$i} eq $n) {
+			# do not make two labels with the same value.
+			$result{$i} = "";
+		}
+		else {
+			$n = $result{$i};
+		}
+	}
+	\%result;
+}
+
+sub optimal_label_interval_2 {
+	my($want_separators, $max) = @_;
+	my($mat, $x); 
+
+	return 1 if (! $max || ! $want_separators);
+	$mat = int($max / $want_separators + 0.5);
+
+	# find the power of 2 which is closest to $mat.
+	for ($x = 1; $x < $mat; $x *= 2) {};
+	if ($x-$mat < $mat-($x/2)) {
+		$mat = $x;
+	} else {
+		$mat = $x/2;
+	}
+	$mat ? $mat : 1;
+}
+
+sub out_index_html {
+	my($rules) = shift;
+	my($rules_data) = shift;
+
+	my($filename);
+	my($n_now, $n_st, $n_end, $s, $s1, $i);
+	my($max, $avg, $tot, $resolution, $text);
+
+	$n_st = nice_date($starttime_explicit || !@timestamps ? $mystarttime : makemytime($timestamps[$[]));
+	$n_end = nice_date($myendtime);
+	$n_now = nice_date(makemytime($now));
+	$resolution = &nice_time($graph_interval);
+
+	$filename = $png_index ? $png_index : $png_index_default_name;
+	if (-d $png && $filename !~ m|^/|) {
+		$filename="$png/$filename";
+	}
+	$text =
+qq|<HTML>
+<HEAD>
+<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">
+|;
+	$text .= qq|<META HTTP-EQUIV="Expires" CONTENT="$expires">\n|
+		if ($expires);
+	$text .= 
+qq|<TITLE>ip accounting graph page</TITLE>
+</HEAD>
+<BODY>
+<H1>ip accounting graph page</H1>
+<TABLE border=0 cellspacing=0>
+ <TR>
+  <TD>Host:</TD><TD>$hostname</TD>
+ </TR>
+ <TR>
+  <TD>Time created:</TD><TD>$n_now $tzname</TD>
+ </TR>
+ <TR>
+  <TD>Data Start time:</TD><TD>$n_st $tzname</TD>
+ </TR>
+ <TR>
+  <TD>Data End time:</TD><TD>$n_end $tzname</TD>
+ </TR>
+ <TR>
+  <TD>Resolution (time/pixel):</TD><TD>$resolution</TD>
+ </TR>
+</TABLE>
+|;
+
+	$text .= "<FONT SIZE=-1>";
+	foreach(@{$rules}) {
+		$s = &good_filename($_);
+		$text .= "[&nbsp;<A HREF=\"#$s\">$_</A>&nbsp;]&nbsp; ";
+	}
+	$text .= "</FONT>\n";
+
+	for ($i=0; $i<=$#{$rules}; $i++) {
+		$_ = ${$rules}[$i];
+		$dat = ${$rules_data}[$i];
+		$s = &good_filename($_);
+		$max = &nice_number(int($$dat{'max_caption'} + 0.5));
+		$avg = &nice_number(int($$dat{'avg_caption'} + 0.5));
+		$tot = &nice_number($bytes{$_});
+		$s1="";
+		$s1="<BR>Max: $max Average: $avg Total: $tot" 
+			if ($png_caption_in_index);
+		$text .= qq|<A NAME="$s"><H3>$_</H3></A>
+  <IMG ALT="graph for $_" border=0 SRC="|;
+		if ($png_filename_prefix ne "") {
+			$text .= "$png_filename_prefix";
+		}
+		$text .= qq|$s.| . ($png_asis ? "asis":$image_type) . 
+  			qq|" WIDTH=$png_width HEIGHT=$png_height>
+  $s1
+<HR>
+|;
+	}
+
+	$text .=
+qq|<ADDRESS>
+Generated by ipacsum which is part of IPAC-NG version $version. IPAC-NG home page:
+<A HREF="http://sf.net/projects/ipac-ng">
+http://sf.net/projects/ipac-ng</A>
+</ADDRESS>
+</BODY>
+</HTML>
+|;
+
+	open(OUT, ">$filename") || die "$me: cant open \"$filename\": $!\n";
+	print OUT $text;
+	close OUT;
+}
+
+# Print a string upwards centered.
+sub centerStringUp {
+	my($im, $text, $font, $x, $y1, $y2, $color) = @_;
+	
+	$y1 = $y1 + int(($y2-$y1)/2 + 
+		length($text)*$png_average_character_width_vert/2 + 0.5);
+	$im->stringUp($font, $x, $y1, $text, $color);
+}
+
+sub http_time {
+	my($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = gmtime(shift);
+	# Fri, 27 Nov 1998 13:50:41 GMT
+	sprintf "%s, %02d %s %04d %02d:%02d:%02d GMT",
+		$wday[$wday], $mday, $mons[$mon], $year+1900,
+		$hour, $min, $sec;
+}
+sub usage {
+	print <<EOF;
+ipacsum V$version $copyright; see file COPYING for license
+Generates summary of ip accounting -- Usage: $me [Options]
+Options:
+ --starttime t, -s t 	Start time, default: The epoch
+ --endtime t, -e t	End time, default: now
+Times are either absolute in format YYYYMMDD[hh[mm[ss]]] !Note year is 4 digit!
+ or relative in format n{s|m|h|D|W|M|Y}... (=sec, min, hours, Days, Weeks...)
+ --fetchipac FILE	override default name of fetchipac
+ --filter r, -f r	filter output by rule names on regular expression
+			works after simple filter
+ --sfilter r, -l r      simple filter that works in storage backend 
+			(use it to reduce memory usage)
+ --hostname h, -H h     hostname to do report for, all hosts, if not specified
+ --omit-zero-lines, -z  omit zero lines in summary
+ --fixed-quantity Q	show values in quantity Q; can be '', K, M, G or T
+ --human-kilo		use the human kilo 1K=1000 instead of 1K=1024
+ --graph, -g		print ascii progression graph for every rule
+ --interval n, -i n	specify progression graph (-g) interval; default 1 
+			  hour; format: any combination of (number size) pairs, 
+			  where size is one of smhDWMY (sec,min,hours,days,...)
+ --timeframe t, -t t	Start and End time in one; time_frame is one of
+			  today, yesterday, "the day before yesterday",
+			  "the day n days ago", "this week", "last week", 
+			  "the week n weeks ago" and so on with (months, years)
+ --help, -h 		Print this help
+ --replace, -r 		replace all summarized accounting files by one.
+			  file name will be according to end time 
+			  Note: this option requires the --hostname option!
+ --dir d, -d d		specify directory containing the accounting data
+ --show-run-progression while running, show number of input files + progression
+$image_TYPE image creation options: Type $me --help --$image_type for help.
+EOF
+	exit 0;
+}
+
+sub usage_png {
+	print <<EOF;
+ipacsum V$version $copyright; see file COPYING for license
+
+$image_TYPE image creation options:
+ --$image_type [DIR]		create $image_type images for each rule in directory DIR
+ 			 (default DIR is the current directory)
+ --$image_type-average-curve N	draw extra line with "defocused" values
+ --$image_type-caption-in-index print statistical data in html index file
+ --$image_type-height N		image height in pixels; default: $png_height
+ --$image_type-index [FILE]	create HTML index file named FILE in $image_type directory;
+ 			 default name: $png_index_default_name
+ --$image_type-no-average	do not draw dotted horizontal line for average value
+ --$image_type-normalize SEC	set Y axis scale to bytes/SEC. Set to 0 to make scale 
+			 absolute according to --interval setting; set to 8
+			 for bit/sec. Default is 1 (bytes/sec).
+ --$image_type-filename-prefix PREFIX	prefix every $image_type image with PREFIX
+ --$image_type-total		put total byte value into image caption
+ --$image_type-use-smallfont	use a smaller font in the image
+ --$image_type-width N		image width in pixels; default: $png_width
+ --$image_type-to-stdout	output images to STDOUT instead of files
+EOF
+	print <<EOF;
+NOTE: Image creation functions work only if you have the perl GD library
+EOF
+	print "installed. This machine does ";
+	if ($have_GD) {
+		print "have it, so everything should work fine";
+	}
+	else {
+		print "not have it, so image creation is disabled";
+	}
+	print ".\n";
+	if ($have_GD) {
+		if (!$png_not_gif) {
+			print <<EOF;
+NOTE: Usage of GIF images is depreciated due to copyright reasons (see
+ipacsum(8)). You might want to consider updating to GD library version 1.20 or 
+EOF
+			print "newer for PNG images. "
+			# no eol!
+		}
+			print <<EOF;
+You have GD library version $GD::VERSION, by the way.
+EOF
+	}
+
+	exit 0;
+}
+
+#@ DEBUG CODE BEGIN
+sub DBXXX {
+	my $way = shift;
+	if ($debug =~ /$way/)
+	{
+		print @_;
+	}
+}
+#@ DEBUG CODE END
+
+# EOF

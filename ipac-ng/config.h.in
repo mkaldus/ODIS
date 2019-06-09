@@ -1,0 +1,80 @@
+/* $Id: config.h.in,v 1.6 2011/11/04 19:14:39 smsoft Exp $ */
+
+/* Define to empty if the keyword does not work.  */
+#undef const
+
+/* Define to `unsigned' if <sys/types.h> doesn't define.  */
+#undef size_t
+
+/* Define if you have the ANSI C header files.  */
+#undef STDC_HEADERS
+
+/* define default storage method */
+#define DEFAULT_STORAGE xxx
+
+/* define default accounting agent */
+#define DEFAULT_AGENT xxx
+
+/* define default access agent */
+#define DEFAULT_ACCESS xxx
+
+/* define conf file for plain-file storage method */
+#define CONFFILE xxx
+
+/* define conf dir for files access agent */
+#define CONFDIR xxx
+
+#define IPCHAINS xxx
+
+/* define plain file data format delimiter */
+#define DATDELIM x
+
+/* define maximum rule name length. */
+#define MAX_RULE_NAME_LENGTH 0
+
+/* define ipfwadm proc file */
+#define IPFWADM_PROC x
+
+/* define ipchains proc chains file */
+#define IPCHAINS_PROC_C x
+
+/* define ipchains proc names file */
+#define IPCHAINS_PROC_N x
+
+/* define names of ipac chains. */
+#define CH_INNAME x
+#define CH_OUTNAME x
+#define CH_CTRL_IN x
+#define CH_CTRL_OUT x
+
+/* define name of data directory */
+#define ACCTDIR x
+
+/* define name of the run file with kernel rule names */
+#define RUNFILE x
+
+#define PIDFILE x
+
+#define RECONFLAG xxx
+
+/* define name of the fetchipac lock file */
+#define LOCKFILE x
+
+#define STATUSFILE xxx
+
+/* ipac version number */
+#define VERSION x
+
+/* Define if you have the gdbm library (-lgdbm).  */
+#undef HAVE_LIBGDBM
+
+/* database definitions */
+#define DBASE x
+#define DBASE_PORT NULL
+
+/* Define to 1 if you have the <linux/magic.h> header file. */
+#undef HAVE_LINUX_MAGIC_H
+
+/* Define to 1 if you have the <linux/proc_fs.h> header file. */
+#undef HAVE_LINUX_PROC_FS_H
+

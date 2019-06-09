@@ -1,0 +1,7 @@
+How to use Robert's sqladd Script:
+
+if you are unexperienced, use a local Database and use a Default Install of MySQL with no password for root, you could simply run "./addsql --add" and the entries and config Options will be set.
+  In such a case it could be helpful to set the "bind  =  localhost" directive in the mysqld section of your my.cnf.
+
+if you are more experienced and would like to specifiy things, try "./addsql --help"
+if you are experienced and ask yourself "why"  go away :-P

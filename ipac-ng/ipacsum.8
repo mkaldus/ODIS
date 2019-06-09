@@ -1,0 +1,426 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\" $Id: ipacsum.8,v 1.12 2011/09/25 23:21:09 smsoft Exp $
+.\"
+.\" =()<.TH IPACSUM 8 "@<MANTIME>@" Linux "IPAC-NG">()=
+.TH IPACSUM 8 "SEPTEMBER 2011" Linux "IPAC-NG"
+.SH NAME
+ipacsum \- summarize, display and compact ip accounting information
+.SH SYNOPSIS
+.B ipacsum
+[
+.B --dir, -d DIR
+] 
+[
+.B --endtime, -e time
+] 
+[
+.B --exact, -x
+] 
+[
+.B --filter, -f regex
+] 
+[
+.B --fixed-quantity Q
+] 
+[
+.B --png DIR
+]
+[
+.B --png-asis
+]
+[
+.B --png-average-curve N
+]
+[
+.B --png-caption-in-index
+]
+[
+.B --png-height N
+]
+[
+.B --png-index FILE
+]
+[
+.B --png-no-average
+]
+[
+.B --png-normalize SEC
+]
+[
+.B --png-filename-prefix PREFIX
+]
+[
+.B --png-total
+]
+[
+.B --png-use-smallfont
+]
+[
+.B --png-width N
+]
+[
+.B --graph, -g
+] 
+[
+.B --help, -h
+] 
+[
+.B --interval, -i n
+] 
+[
+.B --replace, -r
+] 
+[
+.B --show-run-progression
+] 
+[
+.B --starttime, -s time
+] 
+[
+.B --timeframe, -t timeframe
+] 
+[
+.B --version
+]
+.SH DESCRIPTION
+.B ipacsum
+is part of the
+.B ipac
+linux ip accounting package.
+
+.B ipacsum
+first reads files from the directory
+.\" =()<.IR @<ACCTDIR>@ .>()=
+.IR /var/lib/ipac .
+The files in this directory contain ip accounting counter information
+and are created by
+.BR fetchipac (8)
+on a regular basis or by
+.B ipacsum
+itself (see below). By default, all files are read. 
+
+Then, it
+displays a summary of the data from all these files. For each
+ip accounting rule that appears in one of the input files, it 
+displays a number which represents the total bytes which have been
+counted by the rule. For values over 9999 bytes, the count is displayed
+in KBytes with a "K" appended (1024 Bytes = 1 KByte). For values over
+9999 KBytes, the count is displayed in MBytes with a "M" appended
+(1024 KBytes = 1 MByte).
+For values over
+9999 MBytes, the count is displayed in GBytes with a "G" appended
+(1024 MBytes = 1 GByte).
+
+Additionally, the host name, the current time 
+and the creation
+times of the oldest and the newest input files are printed.
+.SH OPTIONS
+.TP
+.B --starttime, -s time
+This selects a set of the input files from the directory
+.\" =()<.IR @<ACCTDIR>@ .>()=
+.IR /var/lib/ipac .
+Only files which are newer than time are read. The time parameter
+can have two different formats. 
+
+It can be an 
+.B absolute
+time in the format YYYYMMDDhhmmss where YYYY means the year, MM the month, 
+DD the day of month, hh the hour, mm the minute and ss the second. 
+Note that the year must have
+four digits! 
+
+The absolute time can be abbreviated at any position; then, the time is
+recognized as the start of
+the respective period. For example, "-s 199805" means start time is the
+first of may, 1998, midnight.
+
+The other form of the time is the
+.B relative
+format. Relative means, back from the current time. It can be any combination
+of number-size pairs, where size is one of the letters 
+.BR s , " m" , " h" , " D" , " M " and " Y" ,
+representing a count of seconds, minutes, hours, days, months or years.
+For example, "-s 1D" means start time 24 hours ago; "-s 1Y1s" means start
+time one year and one second ago.
+
+.SM Note: In relative times, a month has always 30 and a year has
+.SM always 365 days.
+.TP
+.B --endtime, -e time
+This is the pendant to 
+.BR --starttime ;
+only those files from
+.\" =()<.IR @<ACCTDIR>@>()=
+.IR /var/lib/ipac
+are read which are older than time. The format of time is exactly the
+same as with --starttime (see above).
+.TP
+.B --timeframe, -t timeframe
+This sets both start time and end time (see --starttime and --endtime above)
+at once. timeframe is a more or less English time specification. If it consists
+of more than one word, it must be places in quotes. Possible
+values are
+.BR """this hour""" ,
+.BR """last hour""" ,
+.BR """the hour N hours ago""" ,
+.BR today ,
+.BR yesterday ,
+.BR """the day before yesterday""" ,
+.BR """the day N days ago""" ,
+.BR """this week""" ,
+.BR """last week""" ,
+.BR """the week N weeks ago""" 
+.BR """this month""" ,
+.BR """last month""" ,
+.BR """the month N months ago""" ,
+.BR """this year""" ,
+.BR """last year""" " and"
+.BR """the year N years ago""" .
+Replace
+.B N
+with a number.
+.TP
+.B --filter, -f regex
+Filter the set of ip accounting rules that are displayed by name. Only the
+rules that match regex are displayed. regex is a
+perl style regular expression. See
+.BR perlre (1)
+for details.
+.TP
+.B --fixed-quantity Q
+Display byte count values with quantity Q. Q may be '' (for exact byte count,
+same as --exact), K, M, G, or T for KByte, MByte, GByte and TByte. (TByte
+is untested... can anybody confirm if it works?)
+.TP 
+.B --graph, -g
+After the normal output, print ascii graphs for each rule. The graph consists
+of one line per hour (unless this interval is changed with --interval). 
+The lines start with the date and time, specifying the
+hour. Right of the time,
+.B ipacsum
+prints a number of asterisk (*) characters, representing the relative amount
+of traffic counted by this rule in this hour. A header line marks the positions
+"0" and the maximum. The maximum is the amount of traffic in the hour with
+the most traffic.
+
+.B ipacsum
+can also create much nicer png images. See below.
+.TP
+.B --interval, -i TIME
+With --graph, change the interval for which one line is printed. The time
+must be given with any combination of number-size pairs, where size is one
+of
+.BR "s" , " m" , " h" , " D" , " W" , " M " or " Y" ,
+representing seconds, minutes, hours, days, weeks, months and years. For
+example, "--interval 1D" sets the interval to one line per day, or
+"--interval 1W3D" sets it to one line per 10 days. Beware, there must not
+appear white spaces within the TIME string.
+.TP
+.B --help, -h
+Display a help screen.
+.TP
+.B --replace, -r
+After the normal operation, replace all input files (as specified with
+--starttime, --endtime and/or --timeframe) by one single file, containing
+the displayed summary. The new file is in the same format as the old input 
+files and can be read with a later call to
+.BR ipacsum .
+The file name is derived from the endtime of the data displayed.
+
+This option is provided to reduce the overhead of detailed old data in the
+.\" =()<.I @<ACCTDIR>@>()=
+.I /var/lib/ipac
+directory. It sort of "compresses" many detailed data files into one
+summary file. Thus, the resolution of further output of ipacsum will be
+worse because of the loss of details, but disk space is saved and
+.B ipacsum
+runs much faster if it has less input files to read.
+.TP
+.B --exact, -x
+Do not use KByte, MByte or GByte numbers. Display the pure byte count.
+(Same as --fixed-quantity '')
+.TP
+.B --dir, -d DIR
+Override the default accounting file directory
+.\" =()<.IR @<ACCTDIR>@ ,>()=
+.IR /var/lib/ipac ,
+with DIR.
+.TP
+.B --show-run-progression
+While running, display the total number of files to be read and a 
+percentage of files already read. This may slow down
+.BR ipacsum ,
+because terminal output can be expensive.
+.TP
+.B --version
+Display
+.B ipacsum
+version number and exit.
+.SH IMAGE CREATION
+.B ipacsum
+can create png images for every rule which is displayed (so the --filter
+option can be used to create only certain pngs). The png contains a much
+nicer version of the ascii graph.
+
+PNG image creation depends on the existence of the perl GD library. If you
+do not have the GD library installed, 
+.B ipacsum
+won't be able to create images.
+
+If you only have version 1.19 or older of the GD library,
+.B ipacsum
+will create GIF images instead of PNG images. Newer GD library versions 
+dumped the GIF support in favor of PNG due to legal / copyright reasons.
+All newer browsers support PNG images, and their use is strongly encouraged.
+All options described in this section start with '--png'; they work the
+same way if you use the alternative versions which start with '--gif'
+instead. There is no functional difference.
+.TP
+.B --png [DIR]
+Enable png image creation. Images are stored into the directory DIR; if not
+given, in the current directory. The images' file names are derived from the
+rule name - unacceptable characters for file names or for http transfers, such
+as spaces, are
+replaced with underscores ("_"). The images dimensions are
+.\" =()<@<PNG_WIDTH>@ * @<PNG_HEIGHT>@.>()=
+500 * 150.
+The Y axis is scaled in bytes per second. The input data is divided
+into intervals of exactly one pixel on the X axis.
+.TP
+.B --png-asis
+Instead of creating regular .png files, create .asis files. .asis files are
+like .png files, but with an HTTP header prepended. If you use the apache
+HTTP server, you can enable it to directly send .asis files without
+generating many HTTP header lines on its own (see the apache documentation,
+"mod_asis"). The major advantage is that
+we can send HTTP "Expires:" header lines with the png data, forcing
+browsers to reload the pictures. The time given in the Expires: header line
+is the same as in the HTTP META tag in the index html file (see --png-index).
+.TP
+.B --png-average-curve N
+Draw an additional curve with average values for the N dots around
+the current one. The resulting curve shows tendencies rather than exact values.
+Can be useful for long-term development evaluation. A good value for N
+to start with is 15.
+.TP
+.B --png-caption-in-index
+When generating a html index file (see --png-index below), add statistical
+data to each png picture in the index file as text.
+.TP
+.B --png-height N
+Set the image height to N pixels.
+.TP
+.B --png-index [FILE]
+Create a html index file in the image directory, containing all images
+created and some more information about creation/start/end times, host
+name etc. The name of the file is
+.\" =()<@<PNG_INDEX_DEFAULT>@>()=
+index.html
+or, if given, FILE, and it is placed into the png image
+directory unless starting with a "/".
+The index file will have some META-Tags in the <HEAD> section. 
+If the end of the time period for 
+which the data is displayed is the current time, one of them will be an
+"Expires" line so www browsers will know when they should drop the page
+from their cache. The time in there is calculated as "now plus the time one
+value on the X axis represents".
+
+.SM (To be accurate, the time that appears is now plus the time given at 
+--interval, given --interval wasn't smaller than the time one pixel in X
+direction represents in which case it is the time one pixel in X direction
+represents.)
+.TP
+.B --png-no-average
+.B ipacsum
+draws a dashed horizontal line indicating the average value in each
+png picture. Specify this option to suppress that line.
+.TP
+.B --png-normalize SEC
+This setting changes the scale on the Y axis. The scale is set to "bytes per
+SEC seconds". 
+The default value is 1, resulting in a scale of "bytes per second". If
+set to 8, the scale will be "bytes per 8 seconds" which is in fact the same
+as "bits per second" (and the scale label is "bits / sec" in this special case
+indeed). Other values are possible, for example, for a scale of "bytes per
+hour", set this to 3600 (60*60).
+
+If set to 0, the Y scale is what you could call "absolute". The scale factor
+is now evaluated from the --interval (see above) setting which defaults to
+one hour (resulting in a display of bytes / hour). The input data is no longer 
+divided into intervals of exactly
+one pixel per interval, but the pixels are divided into n pixels per (constant)
+interval.
+The resulting X,Y value dots in the matrix are displayed stronger and are
+connected with lines.
+
+.SM Does anybody understand this and has an idea how to explain better?
+.TP
+.B --png-filename-prefix PREFIX
+Prefix every image file name with PREFIX.
+.TP
+.B --png-total
+Put total byte count value - as displayed in the text output - into image
+caption (maximum and average values are there anyway).
+.TP
+.B --png-use-smallfont
+Use a smaller font in the image for labels and scales.
+.TP
+.B --png-width N
+Set the image width to N pixels.
+.SH EXAMPLES
+To display a summary of accounting data for last month:
+
+% ipacsum --timeframe "last month"
+
+To display a summary of accounting data since midnight with a graph
+with one line per hour:
+
+% ipacsum --timeframe today --graph
+
+To display a summary of accounting data for the last ten days with a
+graph with one line for each day, and only for rules containing "isili":
+
+% ipacsum --starttime 10D --graph --interval 1D --filter isili
+
+To summarize all accounting data of 1997 into one file for the whole year
+without displaying anything:
+
+% ipacsum --starttime 1997 --endtime 19971231235959 --replace >/dev/null
+
+or, if we are in 1998:
+
+% ipacsum --timeframe "last year" --replace >/dev/null
+
+To create png graph images of all rules for the last month in the directory
+/tmp, including
+a html file called
+.\" =()<"@<PNG_INDEX_DEFAULT>@">()=
+"index.html"
+to display them all at once in a web browser:
+
+% ipacsum --timeframe "last month" --png /tmp --png-index 
+
+.SH FILES
+.\" =()<.I @<ACCTDIR>@>()=
+.I /var/lib/ipac
+.RS
+The default accounting file directory, mostly fed by
+.BR fetchipac (8).
+.RE
+.SH BUGS
+The graph printing function (--graph) doesn't work
+very well and the output is ugly. Use --png instead.
+.SH VERSION
+.\" =()<This man page belongs to ipac version @<VERSION>@.>()=
+This man page belongs to ipac version 1.34.2.
+For updates and other
+information, look at 
+.B http://sourceforge.net/projects/ipac-ng
+.SH AUTHOR
+Moritz Both <moritz@daneben.de>
+Al Zaharov <kaiser13@mail2000.ru>
+.SH "SEE ALSO"
+.BR fetchipac (8),
+.BR perlre (1).

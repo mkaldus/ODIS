@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# This should be called from cron at regular intervals...
+# Make sure you edit any pathnames / filenames to suit your own setup.
+#
+# Run fetchipac and then update ipac-ng traffic logs and mrtg traffic log(s)
+# This should be called from crom at same regular intervals as those 
+# specified in the in /etc/mrtg/mrtg.cfg config file
+#
+# Update ipac-ng traffic logs...
+/usr/sbin/fetchipac
+
+# Wait for update to complete...
+/bin/sleep 8s
+
+# This not required - Use for debug only....
+#/usr/sbin/ipacsum -s 15m -f all >> /var/www/html/admin/traffic/all.ipac.log
+
+# The mrtg reads data from a unique log file for each "target" ($TARGET.log).
+# The targets are named and configured in the mrtg.cfg file.
+# Use ipaccount to read data from ipac-ng logs and update mrtg log file(s). 
+/usr/bin/mrtg /etc/mrtg/mrtg.cfg
+

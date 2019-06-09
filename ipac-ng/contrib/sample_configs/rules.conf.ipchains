@@ -1,0 +1,38 @@
+# $Id: rules.conf.ipchains,v 1.2 2003/07/06 11:34:52 kaiser13 Exp $
+# Example config file with accounting rules
+# Install as /etc/ipac.conf
+#
+# Format:
+# Name of rule|direction|interface|protocol|source|destination
+# WARNING!!!! spaces are not allowed before and after '|'.
+#
+# where
+# Name of rule		Any string to identify this rule
+# direction		in | out
+# interface		ip number or interface name, '+' means all interfaces
+# protocol		tcp | udp | icmp | all
+# source		\
+# destination		both as described in ipfwadm(8), or empty
+
+# target                accept, deny, reject or none of that
+#
+# incoming:
+
+incoming all |in||all||
+%chain% tcp_in|in||tcp||
+%chain% udp_in|in||udp||
+
+incoming smtp|tcp_in||tcp|0/0 smtp|
+incoming http|tcp_in||tcp|0/0 http https 81:83 8080 squid|
+incoming ftp |tcp_in||tcp|0/0 ftp ftp-data|
+
+incoming samba|udp_in||udp|0/0 :136 140:|0/0 137:139
+incoming samba|udp_in||udp|0/0 137:139|
+incoming dns |udp_in||udp|0/0 domain|
+
+incoming testing|in||all|0/0|80.89.135.80
+incoming tes2|in||all|0/0|192.168.0.30
+
+#
+# Outgoing:
+outgoing all |out||all||

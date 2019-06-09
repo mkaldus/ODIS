@@ -1,0 +1,90 @@
+#!/bin/sh
+# $Id: ipac-convert,v 1.2 2003/07/06 11:34:51 kaiser13 Exp $
+# convert between different ipac database formats
+
+ME=$0
+FETCHIPAC=`IFS=':'; for p in $PATH; do 
+	if [ -x $p/fetchipac ]; then echo "$p/fetchipac"; break; fi; 
+	done`
+START=1
+END=4
+
+while [ "$5" != "" ]; do
+	case "$1" in
+	-f|--fetchipac)
+		shift
+		FETCHIPAC="$1"
+		;;
+	-n|--nothing)
+		DO_NOTHING=1
+		;;
+	--start-step)
+		shift
+		START=$1
+		;;
+	--end-step)
+		shift
+		END=$1
+		;;
+	*)
+		echo "$ME: unknown argument: \"$1\"  $0 --help for help."
+		exit 1
+		;;
+	esac
+	shift
+done
+
+if [ "$4" = "" ]; then
+	cat >&2 <<EOF;
+copy ipac databases between directorys and storage backends
+this is done in four steps which are normally connected with pipelines: 
+(1) list timestamps of source;
+(2) strip timestamp count line (1st line);
+(3) list records of timestamps from source;
+(4) feed the result to fetchipac in batch mode to create records in dest
+Usage: $ME [options] source_dir source_storage dest_dir dest_storage
+Options:
+-f fetchipac, --fetchipac fetchipac
+                specify fetchipac executable to use
+-n, --nothing   do nothing but print the commands that would have been executed
+--start-step S  dont do the steps before S - expect data from stdin
+--end-step S    dont do the steps after S - print result on stdout
+EOF
+	exit 1
+fi
+
+if [ ! -x $FETCHIPAC ]; then
+	echo "$ME: cant execute \"$FETCHIPAC\" - abort"
+	exit 1
+fi
+
+FROMDIR=$1
+FROMFORMAT=$2
+TODIR=$3
+TOFORMAT=$4
+
+if [ $START = 1 ]; then
+	CMD="$FETCHIPAC --directory=$FROMDIR --storage-method=$FROMFORMAT"
+	CMD="$CMD --timestamps --machine-output-format | "
+else
+	CMD="cat | "
+fi
+test $START -le 2 && test $END -ge 2 && CMD="$CMD
+(read NUM; cat) |"
+test $START -le 3 && test $END -ge 3 && CMD="$CMD
+$FETCHIPAC --records --storage-method=$FROMFORMAT --machine-output-format \
+--directory=$FROMDIR |"
+if [ $END -ge 4 ]; then
+	CMD="$CMD
+$FETCHIPAC --directory=$TODIR --storage-method=$TOFORMAT --batch"
+else
+	CMD="$CMD cat"
+fi
+
+if [ -n "$DO_NOTHING" ]; then
+	echo "$CMD"
+	exit 0
+fi
+
+eval $CMD
+#

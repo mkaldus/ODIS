@@ -1,0 +1,34 @@
+# $Id: Makefile.in,v 1.9 2011/11/04 19:14:40 smsoft Exp $
+# Makefile for iptables
+
+SAGENT=iptables
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@ -DNDEBUG -DXTABLES_LIBDIR=\"@XTABLES_LIBDIR@\"
+SLIBS=@IPTSLIBS@
+SINC=@IPTSINC@
+SSRC=@IPTSSRC@
+
+all: libipac$(SAGENT).a iptdoafter
+
+$(SSRC): iptdobefore
+
+iptdobefore:
+	@IPTDOBEFORECC@
+
+iptdoafter:
+	@IPTDOAFTERCC@
+
+libipac$(SAGENT).a: iptables.o $(SLIBS)
+	ar -crus libipac$(SAGENT).a $?
+
+%.o: %.c ../../config.h ../../ipac.h
+	$(CC) -DXTABLES_INTERNAL -c -I. -I../.. $(SINC) $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f *.a *.o
+
+distclean:
+	rm -f Makefile *~ *.orig
+	find . -maxdepth 1 -type l -exec rm -f {} \;
+	rm -f -r iptables/

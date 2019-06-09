@@ -1,0 +1,35 @@
+$Id: BUILD-with-iptables-source,v 1.2 2011/11/05 01:25:59 smsoft Exp $
+BUILDING ipac-ng with iptables source code
+==========================================
+
+
+With version 1.34 fetchipac program became to use iptables shared
+libraries: libxtables.so and libiptc.so (or libip4tc.so). So, these
+libraries must exist in your system if you are building ipac-ng with
+default configuration options.
+
+If your Linux distribution doesn't provide these libraries there
+is a way to compile iptables source code into fetchipac program.
+How to do it?
+
+Firstly, you will need to obtain iptables source package. The preferred
+origin of this package is your Linux distribution, acceptable origin is
+http://www.netfilter.org, the home page of iptables project. Note,
+iptables source package version must match version of iptables binaries
+installed in your system.
+
+Unpack obtained iptables source package to some directory and configure it
+(run ./configure script in that directory). You will need at least read
+access to this directory while building ipac-ng.
+
+Go to ipac-ng source tree root, and run configure script with following
+option:
+	./configure --with-iptables-src=DIR
+where DIR is directory where you unpacked iptables sources.
+
+Compile and install ipac-ng as usual:
+	make
+	sudo make install
+
+Note, you will need to recompile and reinstall ipac-ng every time after
+changing iptables version installed in your system.

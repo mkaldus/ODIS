@@ -1,0 +1,20 @@
+# $Id: Makefile.in,v 1.4 2004/04/18 21:02:38 friedl Exp $
+# Makefile for plain-file
+SMETHOD=plain-file
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+
+all: libstor$(SMETHOD).a
+
+libstor$(SMETHOD).a: plain-file.o
+	ar -crus libstor$(SMETHOD).a $?
+
+%.o: %.c ../../config.h ../../ipac.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f libstorplain-file.a plain-file.o
+
+distclean: clean
+	rm -f Makefile *~ *.orig

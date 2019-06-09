@@ -1,0 +1,53 @@
+Date: Fri, 25 Feb 2000 20:16:04 +0200
+From: Tim Yunaev <tim@lviv.gu.net>
+Reply-To: Tim Yunaev <tim@lviv.gu.net>
+Message-ID: <17844.000225@lviv.gu.net>
+To: Moritz Both <moritz@daneben.de>
+Subject: Re[2]: IPAC contrution: using IPAC and MRTG
+
+Hello Moritz,
+
+Friday, February 25, 2000, 7:37:39 PM, you wrote:
+
+MB> I think it is a great idea to integrate ipac and mrtg. Could you just
+MB> write a few words about what your contributaion does and why and how?
+
+Yes, you're right :)
+
+How it works:
+Mrtg reads its own configuration file, specified by line in crontab
+(look for mrtg manual page for details) and run specified in "target"
+my program "ipaccount". It started with command line param - regexp
+for search all ip-accounting chains (by call 'ipacsum' from ipac
+package) and print found chain data in mrtg format. Mrtg give it and
+write own graphs.
+
+How I make it:
+1. I install ipac and mrtg packages and add "/usr/local/bin/ipacset"
+to the end of my rc.firewall script (ipac is good - it is not destroy
+my own firewall rules, so it is safe).
+
+2. I write ipac.conf file (example added) with all my-need accounting
+chains. Look for chain names - this will be use in regexps later, so
+select it carefully.
+
+3. I write mrtg.conf (example added). In "target" field I call
+"ipaccount" in "/usr/lib/mrtg/ipaccount 15m all" - is "get data from
+chain 'all' for last 15 minutes '15m'" - because my MRTG called every
+15 minutes in my crontab.
+
+4. I test my system by manually call this MRTG string - it must print
+two or more (up to 4) numbers with first is incoming traffic, and
+second - outgoing.
+
+5. I wait 15 minutes and look to MRTG generated pages. If some
+troubles here - 99% that trouble is in mrtg or ipac configuration, so
+see depended manual pages and FAQs.
+
+That's all :)
+Hello from Ukraine :)
+
+-- 
+Best regards,
+ Tim                            mailto:tim@lviv.gu.net
+

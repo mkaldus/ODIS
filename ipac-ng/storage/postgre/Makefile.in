@@ -1,0 +1,22 @@
+# $Id: Makefile.in,v 1.6 2004/06/27 16:13:26 friedl Exp $
+# Makefile for postgre
+# NEEDLIBS=-lpq
+SMETHOD=postgre
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+
+all: libstor$(SMETHOD).a
+
+libstor$(SMETHOD).a: postgre.o
+	ar -crus libstor$(SMETHOD).a $?
+
+%.o: %.c ../../config.h ../../ipac.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f libstorpostgre.a postgre.o
+
+distclean: clean
+	rm -f Makefile *~ *.orig
+

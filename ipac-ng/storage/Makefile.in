@@ -1,0 +1,53 @@
+# $Id: Makefile.in,v 1.5 2004/06/13 01:14:29 friedl Exp $
+CC=@CC@
+CFLAGS=@CFLAGS@
+LDFLAGS=@LDFLAGS@
+LIBS=@LIBS@
+DEFS=@DEFS@
+srcdir=@srcdir@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+INSTALLPATH=@sbindir@
+STORAGEMETHODS=@STORAGEMETHODS@
+
+# add this to DEFS since we cant get autoconf to put it into config.h
+DEFS+=-DINSTALLPATH=\"${INSTALLPATH}\"
+
+all: all-recursive
+
+all-recursive clean-recursive distclean-recursive maintainerclean-recursive:
+	@for subdir in $(STORAGEMETHODS); do \
+		target=`echo $@ | sed s/-recursive//`; \
+		echo "Making $$target in $$subdir"; \
+		fail=""; \
+		(cd $$subdir && $(MAKE) $$target) || fail="yes"; \
+		if [ x$$fail = xyes ]; then \
+			case $$target in \
+			clean) \
+				echo "rm -f $$subdir/*.o $$subdir/*/*.o \
+						$$subdir/libipac$$subdir.a"; \
+				rm -f $$subdir/*.o $$subdir/*/*.o \
+						$$subdir/libipac$$subdir.a; \
+				fail=""; \
+				;; \
+			distclean|maintainerclean) \
+				echo "rm -f $$subdir/*.o $$subdir/*/*.o \
+						$$subdir/libipac$$subdir.a"; \
+				rm -f $$subdir/*.o $$subdir/*/*.o \
+						$$subdir/libipac$$subdir.a; \
+				echo "rm -f $$subdir/Makefile"; \
+				rm -f $$subdir/Makefile; \
+				fail=""; \
+				;; \
+			esac; \
+			test x$$fail = x || exit 1; \
+		fi; \
+	done
+
+clean: clean-recursive
+
+distclean: clean distclean-recursive
+	rm -f Makefile *~ *.orig sharedsql/*~ sharedsql/*.orig
+
+maintainerclean: distclean maintainerclean-recursive
+

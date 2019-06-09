@@ -1,0 +1,5 @@
+#!/bin/sh
+test -f /proc/net/ip_tables_names && test -f /etc/ipac-ng/ipac.conf && test -f /usr/sbin/fetchipac && test -f /usr/sbin/ipacsum|| exit 0
+
+# every day, sum up the data of 7 days ago into one record.
+/usr/bin/nice /usr/sbin/ipacsum -r -t "the day 7 days ago" -H all >/dev/null

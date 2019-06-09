@@ -1,0 +1,347 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\" $Id: fetchipac.8,v 1.15 2011/09/25 23:21:09 smsoft Exp $
+.\"
+.\" =()<.TH FETCHIPAC 8 "@<MANTIME>@" Linux "IPAC-NG">()=
+.TH FETCHIPAC 8 "SEPTEMBER 2011" Linux "IPAC-NG"
+.SH NAME
+fetchipac \- ip accounting kernel data and database handler
+.SH SYNOPSIS
+.B fetchipac
+[
+.B -b|--batch
+]
+[
+.B -d|--directory DIR
+]
+[
+.B -h|--help
+]
+[
+.B -m|--machine-output-format
+]
+[
+.B -r|--records
+]
+[
+.B -R|--list-raw
+]
+[
+.B -s|--storage-method METHOD
+]
+[
+.B -S|--start
+]
+[
+.B -t|--timestamps [START][,END]
+]
+[
+.B -v|--verbose
+]
+.SH DESCRIPTION
+.B fetchipac
+is part of the
+.B ipac-ng
+linux ip accounting package.
+
+.B fetchipac
+reads the kernel ip counters and stores this information in a database.
+It also
+provides access to the database for other programs, mainly for
+.BR ipacsum (8).
+
+If you are an average user of ipac, you don't want to know about 
+most of the things described here. You will want to run fetchipac
+regulary from cron, probably without any options. You will possibly
+want to use the options --directory and --storage-method. The rest
+is mostly for internal use by ipac and for debugging the database.
+
+.B fetchipac
+operates in different modes and does fairly unrelated things. The only common
+thing it does is that it accesses a database. The database can be of different
+types which are called
+.I storage 
+.IR methods .
+The storage methods provided are:
+.\" =()<.I @<STORAGEMETHODS>@.>()=
+.I plain-file .
+The default storage method used is
+.\" =()<.IR @<DEFAULT_STORAGE>@.>()=
+.IR plain-file.
+.B fetchipac
+uses a directory to store data. The default 
+directory for that is
+.\" =()<.IR @<ACCTDIR>@ .>()=
+.IR /var/lib/ipac .
+If the storage method does not make use of this directory, for example, if
+it stores the data on a remote host, the directory is still
+used for the spool file (see below).
+(All these defaults are determined at build time and this man page is
+updated automatically.)
+
+.SH NORMAL OPERATION
+When
+.B fetchipac
+is called without any arguments, it fetches kernel ip accounting data.
+
+To do this, it first runs through a lock mechanism to prevent multiple
+instances of
+.B fetchipac
+to run at the same time. Then, it reads the ipac rule file,
+.\" =()<.IR @<RUNFILE>@ ,>()=
+.IR /var/run/ipac.rules ,
+which maps kernel ip accounting data to names. Next,
+it reads the kernel ip accounting data from the appropriate file in
+/proc/net, which is
+.\" =()<.I @<IPCHAINS_PROC_C>@>()=
+.I /proc/net/ip_fwchains
+if you have an ipchains system (kernel 2.1.* or newer) 
+.B fetchipac
+opens this file in read/write mode; this makes the kernel set all counters
+to zero in the moment the file is opened and we can be sure to
+count every byte only once (see 
+.B BUGS
+section. In case of kernel 2.4.* it uses kernel's internal structures to
+read byte and packet counters.
+
+After reading and closing those files, 
+.B fetchipac
+creates a new record in its database using the default storage method.
+.SH SPOOL MECHANISM
+There is a
+.I spool mechanism 
+which allows 
+.B fetchiapc
+to spool ip accounting data in a file when the database cannot be opened.
+For example, if the storage method stores data on a remote host, the remote host
+might be down or unreachable. Another example is the gdbm storage method;
+if some other process accesses a gdbm file, it is locked and can't be written 
+to.
+If 
+.B fetchipac
+could not spool the data, it would be lost in either case.
+
+If the database can't be opened, the data collected from the kernel is
+put into a spool file. The spool file resides in the data directory and
+its name is
+.IR spool .
+If there is already data in this spool file, the new records are appended.
+The data is stored in this file in the same format as described under the
+batch mode command ADD (see below).
+
+Whenever 
+.B fetchipac
+runs, it checks if the spool file exists. If so, and if the database can
+be opened, the contents of the spool file is copied into the database and
+the spool file is removed.
+
+.SH COMMON OPTIONS
+.TP
+.B -d|--directory DIR
+Use a different data directory DIR instead of the default,
+.\" =()<.IR @<ACCTDIR>@ ,>()=
+.IR /var/lib/ipac ,
+for the database (if the 
+storage method uses a directory to store data) and the spool file.
+.TP
+.B -h|--help
+Print a help message and exit.
+.TP
+.B -s|--storage-method METHOD
+Use METHOD as the storage method. METHOD can
+be one of the compiled in storage methods. Run 
+.I fetchipac --help
+to see which storage methods exactly have been compiled in.
+.TP
+.B -S|--start
+initial accounting setup: insert accounting rules and chains according to
+your 
+.\" =()<.I @<RULESFILE>@>()=
+.I /etc/ipac-ng/ipac.conf
+.RS
+
+.SH OPTIONS USED INTERNALLY AND FOR DEBUGGING
+.TP
+.B -b|--batch
+Switch to batch mode. In this mode, 
+.B fetchipac
+does not fetch ip accounting data from the kernel. Instead, it displays a
+prompt, "> ", on standard output and then expects commands.
+.B fetchipac
+exists when the command QUIT was entered or at end of file on stdin. See
+below, section BATCH MODE, for a description of the commands.
+.TP
+.B -m|--machine-output-format
+When using the --record or --timestamps options,
+.B fetchipac
+normally prints the data in a nice human readable format. When using
+this option, the data will be formatted in a way that it is 
+easily parsable by a program. This is used by 
+.BR ipacsum (8).
+
+When used with --record, the output generated will be in the
+format 
+.B fetchipac
+expects in batch mode with the ADD command.
+
+When used with --timestamps, the output generated will be
+in the format expected on standard input with the
+--record option.
+.TP
+.B -r|--records
+Switch to record retrieve mode. In this mode,
+.B fetchipac
+does not read the kernel ip accounting data from the kernel. 
+Instead, it reads lines from standard input and exits on
+end of file on stdin. The lines are interpreted as decimal numbers
+which represent timestamps. (The lines may begin with a
+single character '+', '-' or '*', which is discarded. The
+number may also be preceded by white spaces.)
+
+For every timestamp read, 
+.B fetchipac
+tries to retrieve the record from the database. If such a
+record is not found, it prints "ERROR". If it is found,
+the record is displayed in a human readable format.
+(See also option --machine-output-format.)
+.TP
+.B -R|--list-raw
+List rules and chains to be inserted into firewall. Don't actually insert
+them, just list.
+.TP
+.B -t|--timestamps [START][,END]
+Print all timestamps for which there are records in the
+database. If given, start with timestamp START and end
+with END. START is interpreted exclusively (if a timestamp
+START exists, it will NOT be printed) and END is 
+interpreted inclusively (if a timestamp END exists, it
+WILL be printed).
+
+Also, print the final timestamp 
+.I before START
+and the first timestamp
+.I after END.
+
+The output will be in a human readable format, unless
+the --machine-output-format option is given.
+.TP
+.B -v|--verbose
+Be verbose. Add more 'v' for more verbosity.
+.SH BATCH MODE
+When
+.B fetchipac
+is in batch mode (option --batch), it recognizes the following commands
+on standard input:
+.TP
+.B ADD
+The ADD command is used to add a record to the database. The ADD command
+takes no arguments, but after giving the ADD command, 
+.B fetchipac
+expects one data record on standard input. 
+
+The data record consists of a
+decimal number representing the timestamp of the record, followed by a 
+space character,
+followed by a decimal number representing the number of sub records that 
+will follow,
+followed by a newline character, followed by the individual sub records,
+followed by a newline character.
+
+A sub record consists of the character '(', followed by a space character,
+followed by a host name representing the machine where the data
+was measured, followed by a newline character, followed by individual rules,
+followed by the character ')', followed by a newline character.
+
+A rule consists of a decimal number representing a byte count, followed
+by a space character, followed by a decimal number representing a packet
+count, followed by a space character, followed by the character '|',
+followed by a rule name, followed by the character '|', followed
+by a newline character.
+
+The ADD command format data can be created using the
+.I --records
+and
+.I --machine-output-format
+options of 
+.B fetchipac
+(together).
+
+Note: The whole record
+is terminated by an empty line. If there is only one sub record, the
+whole thing end with a line with only a ')' followed by an empty line.
+.TP
+.B DELETE timestamp
+The DELETE command takes exactly one arguement: A timestamp (a decimal number).
+.B fetchpipac
+tries to delete the record with this timestamp from the database. If there
+is no such record, it prints "ERROR"; otherwise, the deletion is performed
+and the prompt is displayed again.
+.TP
+.B LIST START END
+START and END are two parameters: Dicimal numbers, representing two 
+timestamps. The operation performed is the same as with the option 
+.IR --timstamps ,
+so see there.
+.TP
+.B QUIT
+Exit.
+.SH FILES
+.\" =()<.I @<RULESFILE>@>()=
+.I /etc/ipac-ng/ipac.conf
+.RS
+The ipac configuration file. 
+.RE
+.\" =()<.I @<RUNFILE>@>()=
+.I /var/run/ipac.rules
+.RS
+ip accounting rule name file.
+.RE
+.\" =()<.I @<ACCTDIR>@/spool>()=
+.I /var/lib/ipac/spool
+.RS
+The spool file.
+.RE
+.SH DIAGNOSTICS
+.I Warning: ipac-ng chains or rules corrupted.
+.RS
+Some program or human deleted one of ipac's chains or rules. This
+probably means that no traffic was counted by ipac-ng since the deletion.
+It may be caused by firewall set up scripts. For example, performing
+.I iptables --flush
+or
+.I -F
+has this effect. Just do
+.B fetchipac -S
+to fix this.
+
+And some more messages which are meant to speak for themselves.
+.SH BUGS
+Resetting accounting data counters on ipchains systems resets all
+counters; there is no way to reset only ipac's counters. Thus, you
+probably can't use other
+ip accounting software together which ipac on the same system.
+This is not right under iptables system. Also, there are some things (bugs)
+in ipchains from 2.4.* kernels and using it is no good. (shortly: dont even try
+to use ipchains with 2.4.* kernels!)
+.SH VERSION
+.\" =()<This man page belongs to ipac-ng version @<VERSION>@.>()=
+This man page belongs to ipac-ng version 1.34.2.
+For updates and other
+information, look at 
+.B http://sf.net/projects/ipac-ng
+.SH HISTORY
+.B fetchipac
+is part of ipac since the beginning. It started as a kernel data
+fetch program only. Until February 2000, it has been a
+shell script and was then rewritten in C. For ipac 2, it grew a lot,
+because database access funtions were added and it became the database
+access program
+.BR ipacsum (8)
+uses.
+.SH AUTHORS
+Moritz Both <moritz@daneben.de>
+.PP
+Al Zaharov <kaiser13@mail2000.ru>
+.SH "SEE ALSO"
+.BR ipacsum (8),
+.BR ipfw (4).

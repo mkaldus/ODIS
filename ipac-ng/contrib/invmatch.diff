@@ -1,0 +1,11 @@
+--- conffile.l	Fri Nov 14 22:51:29 2003
++++ conffile.l	Wed Dec 22 16:35:04 2004
+@@ -21,7 +21,7 @@
+ <par>[ \t]+				/* Eat */ ;
+ <par>yes|true				BEGIN(0); conflval.n = 1; return BOOL;
+ <par>no|false				BEGIN(0); conflval.n = 0; return BOOL;
+-<par>[[:alnum:]\/\-\.]+|[ \t]*\n	BEGIN(0); conflval.s = (char *) strdup(conftext); confline++; return PARAMETER;
++<par>[[:alnum:]\/\-\.\!]+|[ \t]*\n	BEGIN(0); conflval.s = (char *) strdup(conftext); confline++; return PARAMETER;
+ "access"[ \t]+"agent"		 	return ACCESS;
+ "account"[ \t]+"agent"			return ACCOUNT;
+ "hostname"				return HOSTNAME;

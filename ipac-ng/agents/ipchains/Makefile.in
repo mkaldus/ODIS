@@ -1,0 +1,16 @@
+# $Id: Makefile.in,v 1.2 2003/07/06 11:34:52 kaiser13 Exp $
+# Makefile for plain-file
+SAGENT=ipchains
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+
+all: libipac$(SAGENT).a
+
+libipfwc.o: libipfwc.h ipfwc_kernel_headers.h  ../../lib/libnet.h
+
+libipac$(SAGENT).a: ipchains.o libipfwc.o ../../lib/libnet.o
+	ar -crus libipac$(SAGENT).a $?
+
+%.o: %.c ../../config.h ../../ipac.h ../../lib/libnet.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@

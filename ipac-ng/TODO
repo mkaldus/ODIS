@@ -1,0 +1,30 @@
+# $Id: TODO,v 1.8 2011/11/05 01:25:58 smsoft Exp $
+
+Things to do for ipac-ng 2.0 and beyond:
+
+- complete rewrite :(
+
+- implement support for iproute2 (maybe) (not now :)
+
+- update documentation (partially done)
+
+- 'reorganize' option to fetchipac which calls a corresponding function
+  in the storage backend
+
+- 'transaction' storage method API calls so using databases supporting 
+  transactions will almost guarantee to keep accurate and consistent
+  data
+
+- make up a way to pass command line options to storage method backends
+  (for example, a remote database server's host name and login info)
+
+- write documentation on how to create a new storage method
+
+- create documentation document with plain-file storage method 
+  description
+
+- implement support for ipv6
+
+- create frontend GUI application
+
+- create RPM/DEB packages for most popular Linux distributions

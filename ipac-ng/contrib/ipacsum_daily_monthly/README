@@ -1,0 +1,33 @@
+ipacsumdaily/monthly - scripts which create CSV files with daily/montly traffic
+                       statistic and send them to system administrator.
+
+(c) 2010 Sergey Merzlikin (sm@smsoft.ru)
+
+ipacsumday.pl     - creates CSV file with daily traffic statistic, one line per hour.
+                    Usage: ipacsumday.pl DD/MM/YYYY outfile.csv.
+
+ipacsumdaily.pl   - creates CSV file with daily traffic statistic for previous day
+                    and sends it by e-mail to system administrator.
+                    Uses ipacsumday.pl. Both scripts must be in the same directory.
+                    To change CSV files storage filder, sender and recipient
+                    addresses edit script source.
+
+ipacsum-daily     - cron job script which runs ipacsumdaily.pl. Copy it to /etc/cron.daily.
+
+ipacsummonth.pl   - creates CSV file with monthly traffic statistic, one line per day.
+                    Usage: ipacsummonth.pl MM/YYYY outfile.csv.
+
+ipacsummonthly.pl - creates CSV file with monthly traffic statistic for previous month
+                    and sends it by e-mail to system administrator.
+                    Uses ipacsummonth.pl. Both scripts must be in the same directory.
+                    To change CSV files storage filder, sender and recipient
+                    addresses edit script source.
+
+ipacsum-monthly   - cron job script which runs ipacsummonthly.pl. Copy it to /etc/cron.monthly.
+
+ipac-ng-daily     - cron job script which compacts ipac-ng database. It sums up the data
+                    of 7 days ago into one record.
+
+NOTE: edit source of every script to change paths to values used in your system.
+NOTE: Perl scripts require some packages specufied in 'use' statements. Install them via cpan.
+

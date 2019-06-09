@@ -1,0 +1,22 @@
+# $Id: Makefile.in,v 1.1 2004/07/13 11:33:25 friedl Exp $
+# Makefile for mysql
+# NEEDLIBS=-lmysqlclient -lz
+SMETHOD=mysql
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+
+all: libstor$(SMETHOD).a
+
+libstor$(SMETHOD).a: $(SMETHOD).o
+	ar -crus libstor$(SMETHOD).a $?
+
+%.o: %.c ../../config.h ../../ipac.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f libstor$(SMETHOD).a $(SMETHOD).o
+
+distclean: clean
+	rm -f Makefile *~ *.orig
+

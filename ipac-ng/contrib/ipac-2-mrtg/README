@@ -1,0 +1,138 @@
+ 
+ How to graph ipac-ng traffic using mrtg.
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 
+   ipac / ipac-ng authors:
+ 	Moritz Both <moritz@daniben.de>
+ 	Al Zaharov <kaiser13@mail2000.ru>
+ 	http://sourceforge.net/projects/ipac-ng
+ 
+    mrtg:
+ 	http://people.ee.ethz.ch/~oetiker/webtools/mrtg/
+ 
+ 
+    ipac to mrtg:	
+ 	original: Tim Yunaev <tim@lviv.gu.net>   2000
+ 	modified: Roger Buck <saas@users.sf.net> December 2002
+ 
+ NB - Before using these examples, make sure you edit any of the
+      pathnames / filenames shown below to suit your own particular setup!
+ 
+
+
+ Introduction:
+ ~~~~~~~~~~~~~
+ You may already use mrtg to graph traffic 'trends' on your network,
+ but mrtg does not provide a method to graph 'totals' like ipac-ng.
+ 
+ Although ipac-ng includes graphing capability you may use mrtg for
+ display of other data on your network and, for consistency, you may
+ prefer to graph everthing using mrtg.
+ 
+ It is not normally possible to run two traffic monitors on same host (see
+ man fetchipac BUGS) but here is one way to do this using ipac-ng and mrtg.
+ 
+ 
+ 
+ How it Works:
+ ~~~~~~~~~~~~~
+ First, download and install ipac-ng and configure as normal. Make sure
+ that ipac-ng is working correctly, then install and configure mrtg.
+ 
+ Usually you will configure mrtg to run from crontab at regular intervals
+ 
+ You do not need to run snmp with mrtg - ipac-ng can supply all traffic
+ data to mrtg using the ipcaacount script (included in ipac-ng contrib);
+ Your mrtg configuration file is configured same as normal but use "ipaccount"
+ script to collect traffic data instead of using snmp and you should run mrtg
+ from cron instead of as daemon (unless you know how and why :).
+ 
+ Instead of using snmp, the mrtg config file specifies "ipaccount" as a 
+ "target" script to obtain mrtg traffic data.
+ 
+ The traffic data is stored in normal mrtg log file _and_ in ipac-ng log file.
+ 
+ The "ipaccount" script calls "ipacsum" (part of ipac-ng) to collect
+ traffic data from ipac-ng log files.... so that mrtg does not reset the
+ iptables data back to zero when reading traffic statistics (read the
+ ipac-ng "fetchipac" manual for further information). 
+ 
+ You can use ipac-ng data _and_ mrtg data at same time on the same host.
+ 
+ 
+ 
+ Getting Started:
+ ~~~~~~~~~~~~~~~~
+ 1. Install ipac-ng and mrtg packages and add "/usr/local/bin/fetchipac -S"
+ to the end of your "rc.firewall" (or similar) script (ipac-ng will not 
+ affect any other firewall rules that you have created).
+ 
+ 
+ 2. Edit your /etc/ipac-ng/ipac.conf and /etc/ipac-ng/rules.conf files
+ Depends on version of ipac-ng).  Make sure you understand "chain" names.
+ The "cahain" names will be used in the ipaccount "regular expressions"
+ (regexps). Select your names carefully so that they are simple and
+ unambiguous.
+ 
+ 
+ 3. Edit your mrtg.conf file. In the mrtg "target" field, enter the
+ full path to "ipaccount", the time interval and the regexp to identify
+ the name of the rule(s) that mrtg will use to create graph.
+ For example, "/usr/lib/mrtg/ipaccount 15m all" - means "get data from
+ any chain that contains the regexp 'all' for last 15 minutes '15m'"
+ The 15m time can be whatever time you like, but should be the same
+ period that MRTG is run - in this example, mrtg is called every
+ 15 minutes from crontab. The mrtg log file is based on minimum
+ time periods of 5 minutes duration, so 5 minutes would be the
+ minimum sensible period for your cron job!
+
+ 
+ Here is an example of what you may enter in crontab (crontab -e):
+ 
+ 	# Update ipac and mrtg traffic logs every nn minutes...
+ 	*/15 * * * * /usr/local/bin/ipac-2-mrtg
+ 
+ 
+ 4. Test your results by manually calling this MRTG string from command line.
+ You should see two or more (up to 4) numbers (read about mrtg logfile
+ format): The first line is total incoming traffic (in bytes), and second
+ line is outgoing traffic (bytes). To understand what "total" really means,
+ you must read the manuals for fetchipac and ipacsum included with ipac-ng!
+ 
+ 
+ 5. After your cron job has been running for 20 - 30 minutes,  look at
+ your mrtg graphs and log files. If you have any problems, then use
+ the following command line options to see if the results are "sensible",
+ and read the ipac-ng and mrtg manuals and reference documents.
+ 
+ 
+ 
+ 
+ The following may help troubleshooting from command line:
+ 
+ 1. To make sure ipaccount + mrtg.conf are working correctly:
+ 
+      /usr/local/bin/ipaccount 15m all
+ 
+ 
+ 2. To make sure that ipac-ng and mrtg agree about traffic data:
+ 
+     /usr/local/sbin/ipacsum -s 15m -f all
+ 
+ 
+ 
+ HINTS:
+
+  You probably want to use "growright and "absolute" in mrtg.cfg
+ 
+  The mrtg "absolute" and "gauge" options are mutually exclusive!!!
+ 
+  Suggestion: Until you make sure everything is working as expected,
+  make sure  that ipaccount is saving data in bytes (not bits,
+  Kilobytes or Megabytes, unless you know how and why to change it :-)
+ 
+ 
+  Good Luck and enjoy :-)
+ 
+ ######################################################################
+ 

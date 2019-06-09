@@ -1,0 +1,409 @@
+$Id: README,v 1.7 2011/11/05 01:25:58 smsoft Exp $
+
+	IPAC-NG (IPAC next generation)
+	(c) 1997 - 2000 Moritz Both
+	(c) 2001 - 2002 Al Zaharov
+	For copyright notice see at the bottom of this file
+
+
+WHAT IS IT?
+
+ipac is a package which is designed to gather, summarize and nicely
+output the IP accounting data. ipac make summaries and graphs as ascii
+text and/or images with graphs.
+
+ipac...
+	- is for Linux
+	- runs on top of the iptables or ipchains tool
+	- needs certain kernel parts compiled in
+
+NOTE FOR THAT WHO TRY TO USE THIS FOR THE FIRST TIME
+2.2.* kernels support is not well, please use 2.4-3.0 + iptables. All features
+tested & work only for 2.4-3.0 kernels. But in case you need simple accounting
+only 2.2 is enough.
+
+
+HOW DOES IT WORK?
+
+  ipac consists of one perl script and one C program:
+
+  - fetchipac, executed from cron once in a while, reads
+  the current ip accounting data assembled by the kernel
+  and stores it into a database
+
+  - ipacsum summarizes the data from a set of records from the database
+  and, optionally,
+  replaces these records by one. It displays the values as a simple
+  table containing the sums, as png graph pictures or as ascii graph
+  pictures.
+
+
+UPDATE
+
+If you are updating from an older version of ipac, read the file
+UPDATE.  Especially if you update from a version prior to 1.90 to
+1.90 or newer, really do this.
+
+
+INSTALLATION / PRECONDITIONS
+
+ipac-ng runs at least under Linux kernel 2.2.11, 2.2.16 - 2.2.19, 2.4.1, 2.4.3,
+2.4.[4-13]. It should run on any kernel above including 2.6.X and 3.0.X. 
+
+You need perl 5.
+
+If you want to use ipacsum to create images, you need a perl library
+called "GD". If GD is not installed and you run ipacsum to make images,
+it will exit with an error. GD can be found at http://www.cpan.org/CPAN.html
+- follow the link to the perl module list and look for GD. After downloading,
+you must install GD as described within the package.
+
+The type of images ipacsum makes depends on the version of the perl GD
+library you have. If you use GD version 1.19 or older, you will be 
+generating gif images. If you use GD version 1.20 or later, the image 
+format will be png. png is preferred because there is no copyright / patent
+hassle.
+
+ipac uses the gdbm library. You probably have it anyway since
+many programs use it. If not, configure will complain.
+
+cgi scripts uses DBI, DBI-pg and CGI perl modules. They can be found at cpan
+http://www.cpan.org/CPAN.html.
+
+
+PRECONDITIONS FOR 2.1.* and 2.2.* kernels
+
+At first, you'll need an ipchains tool.
+
+You need a kernel which was compiled with the configuration option 
+CONFIG_IP_FIREWALL set to y. You also need the front end to ip firewall and
+ip accounting, that is, the tool 'ipchains'. I used version 1.3.8, and
+it was reported that older versions do not work.
+
+Finally, you will need awk and mktemp.
+
+* Beware: firewall packet filter scripts may interfere with ipac-ng when
+* using 2.2.* or 2.4.* kernels! If you have a script that sets up a packet 
+* filter, read the fetchipac man page, section BUGS!
+
+
+PRECONDITIONS FOR 2.4.*, 2.6.* and 3.0.* kernels
+
+You'll need an iptables tool. Don't even try to use ipchains with these 
+kernels. There is a bug that don't allow correct counters zeroing.
+
+You need a kernel which was compiled with the configuration option
+"Network packet filtering (replaces ipchains)" set to "y" or "m". Also
+"IP tables support" and "Packet filtering" must be set to "y" or "m".
+
+NOTE: ipac-ng 1.34.2 works with iptables 1.4.3 and higher (confirmed up to
+         1.4.12.1);
+      ipac-ng 1.33 works with iptables 1.4.2;
+      ipac-ng 1.32 and lower work with iptables 1.2.X and 1.3.X.
+
+ipac-ng since v.1.34 uses iptables shared libraries, so these libraries
+must exist in your system (i.e. iptables must not be compiled with an option
+which excludes production of these libraries: libxtables.so and libiptc.so
+or libip4tc.so).
+
+If your system doesn't provide iptables shared libraries you can build
+ipac-ng statically with iptables source code. See BUILD-with-iptables-source
+file in doc subdirectory for instructions how to do it.
+
+To compile ipac-ng 1.34 and later you will need iptables headers.
+Please install iptables-dev package - it provides these headers.
+You don't need these headers if you are compiling ipac-ng statically with
+iptables source code.
+
+NOTE: ipac-ng 1.33 and higher (especially fetchipac program) must be used
+      with the same version of iptables which it was compiled with,
+      otherwise memory corruption may occur. Some versions may be compatible,
+      but to be on the safe side, you should avoid version mixing.
+      Always recompile/reinstall ipac-ng after iptables uprgades/downgrades!
+
+
+INSTALLATION / OVERVIEW
+
+To install:
+  - Run ./confiure. Normally, there are no options neccessary,
+    but you want to use options to configure if you want to
+    	o  change the install prefix to something else than
+	   /usr/local
+	o  set a specific default storage method
+    If you want to specify a certain default data directory, set the
+    environment variable ipac_datadir before running configure.
+    If you don't so that, configure will look for existing data
+    and in case such data is found, it will use that directory;
+    otherwise it uses /var/lib/ipac .
+
+  - Run 'make'.
+
+  - As root, run 'make install'.
+
+  - Create the files '/etc/ipac-ng/ipac.conf' and '/etc/ipac-ng/rules.conf'.
+
+  - Run 'fetchipac -S'.
+
+  - Put fetchipac into cron (see below).
+
+  - Put 'fetchipac -S' into a startup file to set ip accounting after reboot
+  	(see below)
+
+  - Make sure that the accounting data records are cleaned up properly
+  	(see below).
+
+
+INSTALLATION / CONFIG FILE.
+
+The ipac.conf file is '/etc/ipac-ng/ipac.conf'. See ipac.conf.sample file
+in doc subdirectory for its format. This file references to rules file
+which is typically '/etc/ipac-ng/rules.conf'.
+
+Rules file controls what data is collected.
+Each line which begins with a '#' is ignored. All the other lines have
+the format
+
+  Name of rule|direction|interface|protocol|source|destination
+
+  where
+  Name of rule          Any string to identify this rule
+  direction             'in' or 'out'
+  interface             interface name or '+' or empty
+  protocol              'tcp' or 'udp' or 'icmp' or 'all'
+  source                \
+  destination           both as described below, or empty
+ 
+In the summaries, the 'Name of rule' string identifies the counter.
+
+The syntax of both the source and destination must be following:
+
+  address[/mask] [port ...]
+
+Address can be either a hostname, a network name, or a plain IP address.
+The mask can be either a network mask or a plain number, specifying the
+number of 1's at the left side of the network mask (CIDR notation). Thus,
+a mask of 24 is equivalent with 255.255.255.0.
+
+Note, that if hostname is specified as source/destination address, the
+name resolution occurs at the moment when fetchipac -S invoked, i.e.
+when ip accounting is initialized. The case if hostname resolves in
+multiple IP addresses currently not supported.
+
+The source/destination may include one or more port specifications or
+ICMP types. Each of them can either be a servicename, a port number, or
+a (numeric) ICMP type.
+
+Note that the specified protocol may imply restrictions on the ports to
+be specified. Ports may only be specified in combination with the tcp,
+udp, or icmp protocol. When this option is omitted, the default
+address/mask 0.0.0.0/0 (matching with any address) is used as
+source/destination address.
+
+The interface can be named (for example, eth0). Empty field or '+' both
+mean 'any interface'. Linux IP accounting always counts at one interface
+or at any interface. The direction means in or out of this interface.
+
+You can have several lines with the same name of the rule. This means
+that these lines will share one counter, i.e. results will be summarized.
+
+* You must run the fetchipac -S after changing the 
+* rules or ipac.conf file every time for the changes to take effect!
+
+An example ipac.conf and ipac.rules files come with the distribution.
+
+Since of version 1.09 of ipac-ng there are some improvements done:
+    1) you may define user-defined accounting chains for the sake of speed;
+    2) you may use network file in source *or* destination for the sake of 
+    configurability.
+
+
+USER DEFINED CHAINS
+
+Imagine that you have to account traffic for few hundreds of users, ok prior
+to version 1.09 you'l end up with some thousands of rules in plain format. And 
+each packet will travel throught all of that rules. This will lead to major 
+performance loss. Since 1.09 you may define separate chain for every user and
+number of rules that every packet should travel will be significantly lower.
+For e.g. you have 300 users and want to count 15 sorts of traffic for each of
+them. That will give you about 15 * 300 (*2) = 4500 (9000) rules. (9000 is for 
+ipchains, it's because packet traverses 'input' *and* 'output' chains). Let's
+try to do the same work with user defined chains (or hierarchic rules). 
+In the simplest case every user will have one chain. (chain=user case). And
+every packet now will travel throught 1-315 rules. So if your users creates
+identical packet activity then you'll achieve more than 10 times faster packet 
+passing. Sure, in more complex case you may build some sort of binary tree - 
+just divide your users in to two (or more) groups then divide that groups.. 
+and so on..
+
+
+HOW TO DEFINE USER CHAINS
+
+First, get a look at example ipac.conf. Still questions? ok.. Since of 1.09
+there is a special tag in 'Name of rule' field of config. It's, as you can see,
+'%chain% '. Config file parser meeting this tag make decision not to create new
+rule and instead it creates new chain with the name that follows the tag. Then
+you may insert rules (chains too!) to that chain simple by specifing your
+newly created chain name in the directory field.
+Take a look for the following lines of config:
+
+incoming all |in|eth0|all||   				(1
+%chain% tcp_in|in||tcp||				(2
+%chain% udp_in|in||udp||				(3
+							(4
+incoming dns |udp_in||udp|0/0 domain|			(5
+incoming dns |tcp_in||tcp|0/0 domain|			(6
+
+this simple config will create two chains: 'tcp_in' and 'udp_in' by lines (2
+and (3 respectively. Line (5 will create rule named 'incoming dns ' in the 
+chain 'udp_in' and line (6 will do so in the 'tcp_in'. In the dry output you'll
+see accounting for 2 rulesonly: 'incomung all ' and 'incoming dns '.
+Still questions? Welcome to email! kaiser13@mail2000.ru.
+
+
+INSTALLATION / FETCHING ACCOUNTING DATA FROM KERNEL: FETCHIPAC IN CRON
+
+In order to collect the accounting data, you must put a line into a
+crontab to call fetchipac on a regular basis. The more often you call 
+fetchipac, the less data is lost in case of a crash or reboot. It 
+is unharmful to call fetchipac any time. I suggest to call it every 
+5 - 15 minutes.  For example, put this into your /etc/crontab file:
+
+# Save IP accounting info every five minutes.
+*/5 * * * * root /usr/local/sbin/fetchipac
+
+
+INSTALLATION / AFTER REBOOTS
+
+Naturally, the kernel forgets about the ip accounting on reboots.
+To reset the ip accounting properly, you should put a line into a
+startup file to call fetchipac. For example, in my /etc/rc.d/rc.local
+file, I put this:
+
+# Switch on ip accounting
+/usr/local/sbin/fetchipac -S
+
+Hint: This crontab entry will call fetchipac -S if ip accounting is not
+      initialized (or destroyed by another program) or call fetchipac
+      without switches otherwise. Unwrap the line below, it is wrapped
+      for readability.
+
+*/10 * * * * root  (test -f /etc/ipac-ng/ipac.conf && test -f 
+	/usr/local/sbin/fetchipac && test -d /var/lib/ipac/ && 
+	/usr/bin/nice /usr/local/sbin/fetchipac 2>&1 | 
+	/bin/grep -q corrupted && /usr/bin/nice 
+	/usr/local/sbin/fetchipac -S) || [ $? -eq 1 ]
+
+
+READING IP ACCOUNTING SUMMARIES
+
+To get summaries, use ipacsum. Without arguments, ipacsum will print a
+sum for every rule in ipac.conf. It will evaluate every record it finds in
+the ip accounting data database, thus, all data ever gathered by 
+fetchipac will be used.
+
+ipacsum outputs a nicely formatted overview of all accounting rules
+which were in effect during the given period. The rules are identified
+by their names from the ipac.conf file. If a rule was added or
+deleted during that time, it is nevertheless shown.
+
+Other capabilities of ipacsum include generation of graph images, filter output
+by rule name and setting time frame of records to be evaluated.
+
+For a complete description of ipacsum, read the man page ipacsum(8).
+A small help screen will be displayed with ipacsum --help.
+
+
+CLEANING UP
+
+fetchipac generates a single database record every time it runs.
+The more often fetchipac runs, the more records you get and the
+more exact will be your accounting info. For example, if you run
+fetchipac every five minutes, ipacsum will be able to display
+accurate data for every five minute period.
+
+Every time ipacsum runs, you can let it make a summary record for
+all the records read to replace them. This will decrease the needed
+disk space and the time ipacsum needs to calculate sums for this
+period. You lose accuracy, though, since all data records are
+summarized into one, meaning there will be no more information
+when exactly the traffic occurred, but only the sum for the whole
+period.
+
+In general, it makes sense to periodically summarize the info
+for a past period. For example, you could run these cron jobs
+cleanups:
+
+ - run fetchipac every 15 minutes
+ - every hour, summarize the records of the hour 48 hours ago
+ - every day, summarize the records of the day 7 days ago
+ - every week, summarize the records of the week 11 weeks ago
+ - every year, summarize the records of the year 2 years ago
+
+With this scheme, you can have the data of the ip traffic with
+15-minute-accuracy for the past two days. For the last week, you
+still can tell at which day the traffic passed your machine. Keeping
+the daily records for 14 weeks, you have a daily overview of the last
+three months. After that, you keep weekly records only. After two years,
+you sum up the data of the year into one record.
+
+The daily cron jobs could look like this:
+
+# Summarize ip accounting info:
+# every day, sum up the data of 7 days ago into one record.
+1 0 * * * root /usr/local/bin/ipacsum -r -t "the day 7 days ago" >/dev/null
+# every hour, sum up the data of 48 hours ago into one record
+2 * * * * root /usr/local/bin/ipacsum -r -t "the hour 48 hours ago" >/dev/null
+# every week, sum up the data of the week 11 weeks ago into one record
+3 0 * * 0 root /usr/local/bin/ipacsum -r -t "the week 11 weeks ago" >/dev/null
+# every year, sum up the data of the year 2 years ago into one record
+4 0 1 2 * root /usr/local/bin/ipacsum -r -t "the year 2 years ago" >/dev/null
+
+
+FURTHER DOCUMENTATION
+
+Read the man pages - ipacsum(8) and fetchipac(8).
+
+
+CONTRIBUTIONS
+
+The directory contrib/ contains stuff that does not directly belong to 
+ipac but is related. Further (well-documented and... "nice") 
+contributions to the directory are welcome!
+
+Thanks to all who contributed with patches, comments or suggestions!
+
+
+UPDATES, BUG REPORTS, WHERE TO GET
+
+For new versions of ipac-ng, look at 
+http://sf.net/projects/ipac-ng
+
+
+If you find a bug, please send me a report or a diff. See at the
+bottom of this file for the email address.
+
+
+COPYRIGHT
+
+  Copyright (C) 1997 - 2000 Moritz Both
+                2001 Al Zaharov
+ 
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
+ 
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+ 
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ 
+  The author can be reached via email: moritz@daneben.de, or by
+  snail mail: Moritz Both, Im Moore 26, 30167 Hannover,
+              Germany. Phone: +49-511-1610129
+
+  Al Zaharov can be reached via: kaiser13@mail2000.ru

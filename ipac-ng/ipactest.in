@@ -1,0 +1,173 @@
+#!/bin/sh
+# $Id: ipactest.in,v 1.2 2003/07/06 11:34:51 kaiser13 Exp $
+#
+# run tests on fetchipac
+#
+# $Log: ipactest.in,v $
+# Revision 1.2  2003/07/06 11:34:51  kaiser13
+# fixing doubled files
+#
+# Revision 1.1.2.1  2000/07/06 21:42:48  moritz
+# ipactest started
+#
+#
+
+# a list with all tests.
+TESTS="sequential_db_write sequential_db_read random_db_write"
+SHOW_FETCHIPAC_CALLS=no
+
+PERL=@PERL@
+
+# find a good tmp directory.
+test -z "$TMP" && TMP="/tmp"
+DBDIR="$TMP/ipactest.$$"
+
+# find fetchipac. Prefer ./fetchipac over one in $PATH.
+FETCHIPAC=./fetchipac
+test -x $FETCHIPAC || FETCHIPAC=fetchipac
+
+STORAGE_METHOD=""
+
+# parse command line
+while [ -n "$1" ]; do
+	case "$1" in
+	-s|--s*)
+		STORAGE_METHOD="--storage-method $2"
+		shift
+		;;
+	*)
+		echo "$0: unknown argument: $1" >&2
+		exit 1
+		;;
+	esac
+	shift
+done
+
+# on exit, clean up.
+trap "rm -rf $DBDIR; exit 1" 1 2 3 15
+trap "rm -rf $DBDIR" 0
+
+# create the tmp directory.
+mkdir -p $DBDIR || exit 1
+
+# a function to call fetchipac.
+call_fetchipac() {
+	CF_CMD="$FETCHIPAC $STORAGE_METHOD --directory $DBDIR $*"
+	test $SHOW_FETCHIPAC_CALLS = yes && echo "  $CF_CMD" >&2
+	$CF_CMD
+}
+
+# print a message from within a test. Supress newline if $1 is '-n'.
+msg() {
+	if [ "$1" = "-n" ]; then
+		shift
+		echo -n "  $*" >&2
+	else
+		echo "  $*" >&2
+	fi
+}
+
+# a function to create a data stream in fetchipac ADD format (see fetchipac(8)).
+# the records are printed on stdout
+# it creates records according to the parameters:
+# $1 - the number of records to be created
+# $2 - the timestamp of the first record
+# $3 - the increment of timestamps between records
+# $4 - the number of rules in each record
+# $5 - the name of the host in the records
+create_data() {
+	# use a perl script to do this
+	echo "$*" | $PERL -e '
+		$_ = <>;
+		($num, $ts, $ts_incr, $nrules, $hostname) = split /\s+/;
+		for ($i=0; $i<$num; $i++) {
+			print "ADD\n$ts 1\n( $hostname\n";
+			for ($ir=0; $ir<$nrules; $ir++) {
+				$pkt = int($ts/1024) + 1;
+				print "$ts $pkt |Rule Number $ir|\n";
+			}
+			print ")\n\n";
+			$ts += $ts_incr;
+		}
+	'
+}
+
+#############################################################
+# Test 1: Read a data file with $T1NREC records, each containing
+# $T1NRULES rules, and put it into the database.
+sequential_db_write() {
+	T1NREC=1000
+	T1NRULES=100
+	msg -n "creating ascii data file with $T1NREC records... "
+	create_data $T1NREC 1000000 10 $T1NRULES `hostname` >$DBDIR/add.1 \
+		|| return 1
+	msg "done."
+	T1NLINES=`expr $T1NREC / 40`
+	msg "feeding records into database (expect ~$T1NLINES lines of \">\")..."
+	call_fetchipac --batch < $DBDIR/add.1 || return 1
+	msg
+}
+
+#############################################################
+# Test 2: Read all records from the database,
+# verifying they are correct.
+sequential_db_read() {
+	msg -n "reading timestamps... "
+	call_fetchipac --timestamps --machine-output-format >$DBDIR/1.ts \
+		|| return 1
+	msg "done."
+	msg -n "reading records..."
+	(read XXX; cat) <$DBDIR/1.ts | \
+		call_fetchipac --records --machine-output-format \
+		> $DBDIR/add.1.afterdb || return 1
+	msg "done."
+	msg -n "Comparing data before and after database... "
+	if cmp --quiet $DBDIR/add.1 $DBDIR/add.1.afterdb; then
+		msg "done."
+	else
+		msg "ERROR"
+		msg "Data was corrupted by the database! Press RETURN to see differences"
+		read XXX
+		diff -u $DBDIR/add.1 $DBDIR/add.1.afterdb | less
+		return 1
+	fi
+}
+
+#############################################################
+# Test 3: Write another $T3NREC records into the database, partly
+# between the already existing ones, and check the result
+random_db_write() {
+	T3NREC=$T1NREC
+	msg -n "creating another ascii data file with $T3NREC records... "
+	create_data $T3NREC 1000005 10 $T1NRULES `hostname` >$DBDIR/add.3 \
+		|| return 1
+	msg "done."
+	T3NLINES=`expr $T3NREC / 40`
+	msg "feeding records into database (expect ~$T3NLINES lines of \">\")..."
+	call_fetchipac --batch < $DBDIR/add.3 || return 1
+	msg
+	T3EXPECTTS=`expr $T1NREC + $T3NREC + 1`
+	msg -n "checking for correct number of timestamps in database..."
+	T3NTS=`call_fetchipac --timestamps --machine-output-format|wc -l` \
+			|| return 1
+	if [ $T3NTS != $T3EXPECTTS ]; then
+		msg "WRONG (expected $T3EXPECTTS, got $T3NTS)"
+		return 1
+	fi
+	msg "correct."
+}
+
+
+# now run the individual tests.
+TESTNO=0
+for test in $TESTS; do
+	TESTNO=`expr $TESTNO + 1`
+	echo "Starting test no. $TESTNO: $test..." >&2
+	if eval $test; then
+		echo "Test no. $TESTNO ($test): success" >&2
+	else
+		echo "Test no $TESTNO ($test) FAILED!" >&2
+		break
+	fi
+done
+

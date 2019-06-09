@@ -1,0 +1,28 @@
+addmysql for ipac-ng Version Alpha 3
+
+					Germany, 24.10.2004
+
+written by Robert
+
+This Script wants to create the neccessary MySQL entries that are needed for ipac-ng to work properly.
+It takes several arguments, get a full list with "addsql --help"
+
+It's a very early Version,
+
+TEST IT AT YOUR OWN RISK!
+
+I tested it with ipac-ng Version 1.31 and MySQL mysql-3.23.44, yeah it IS really old, I'll upgrade when I've got time.
+
+Features:
+
+Alpha 3:
+
+-wants to be Newbie friendly, needs no arguments to create a full functional DB
+-Creates a User in MySQL, a Database and a table in ipac-ng scheme
+-tries to set up the Config for mysql and the given User, DB and password
+-has a Reverse function that reverses (deletes) the given values and puts the old Config back
+
+
+Suggestions, Ideas, Spam?
+
+verdammtescheise@gmx.de !

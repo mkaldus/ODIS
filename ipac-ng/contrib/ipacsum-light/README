@@ -1,0 +1,68 @@
+pg at philipp.de.com - 22/11/01
+
+ipacsum-light.pl creates an overview of the data being gathered from ipac-ng; 
+it has been written, since performance of the 'ipacsum' is poor (though it is
+more sophisticated and works with a number of storage methods). ipacsum-light.pl
+does only work with pgsql.
+The performance issue is generally no problem, but if one wants to create a
+webinterface it would be nicer, if it was faster...
+
+Please note, that this script is probably only useful, if you have one or more
+rules for each IP of ie. a Class-C...
+
+The ipacsum-light.pl table definition is:
+
+ CREATE TABLE "light_logs" (
+         "rule_name1" character varying(100) NOT NULL,
+         "rule_name2" character varying(100),
+         "rule_name3" character varying(100),
+         "timeframe" character varying(15) NOT NULL,
+         "bytes" bigint DEFAULT 0 NOT NULL
+ );
+ CREATE  INDEX "timeframe" on "light_logs" using hash ( "timeframe" "varchar_ops" );
+ CREATE  INDEX "rule_name1" on "light_logs" using hash ( "rule_name1" "varchar_ops" );
+ CREATE  INDEX "rule_name2" on "light_logs" using hash ( "rule_name2" "varchar_ops" );
+ CREATE  INDEX "rule_name3" on "light_logs" using hash ( "rule_name3" "varchar_ops" );
+
+
+The first thing you probably mentioned is, that there are 3 rule_name fields:
+ipacsum-light.pl will automatically split rules on ' ' (whitespace).
+Imagine you have a rule named
+'10.0.0.1 smtp in'
+
+ipacsum-light.pl will therefore insert a record such as:
+
+   rule_name1    | rule_name2 | rule_name3 | timeframe |    bytes    
+-----------------+------------+------------+-----------+-------------
+ 10.0.0.1        | smtp       | in         | 2001_12   |        1024 
+
+
+ipacsum-light.pl also as a different timeframe usage (generally this is a bad idea,
+but for getting an overview, I think it's nicer.)
+
+it will create the following timestamps, which are always up to date (ie. the month
+timestamp is "all data in this month, although it is only the 15th of the month):
+
+today
+yesterday
+this_week
+last_week
+<year>_<month> (ie. 2001_11)
+
+
+Assuming you would only have 1 rule setup, you would get records such as:
+(bogus data)...
+
+   rule_name1    | rule_name2 | rule_name3 | timeframe |    bytes
+-----------------+------------+------------+-----------+-------------
+ 10.0.0.1        | smtp       | in         | today     |        1234  
+ 10.0.0.1        | smtp       | in         | yesterday |        2341  
+ 10.0.0.1        | smtp       | in         | this_week |       12345   
+ 10.0.0.1        | smtp       | in         | last_week |       23451  
+ 10.0.0.1        | smtp       | in         | 2001_11   |      456123
+ 10.0.0.1        | smtp       | in         | 2001_11   |      654321   
+
+
+
+for options, please type:
+./ipacsum-light.pl --help

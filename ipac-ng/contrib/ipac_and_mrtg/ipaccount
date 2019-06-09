@@ -1,0 +1,23 @@
+#!/usr/bin/perl -w
+
+# To speed up script saved ipacsum output to logfile and use it
+# (with time check) instead of necessary calls
+
+$ENV{PATH}="/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin";
+
+die "Usage: ipaccount <relative time> <regexp>\n" if $#ARGV < 1;
+
+@output = `/usr/local/bin/ipacsum --fixed-quantity K -s $ARGV[0]`;
+die "Can't execute ipacsum: $!\n" if !defined @output;
+
+$bytesin=0;
+$bytesout=0;
+
+foreach (@output)
+{
+    # Incoming
+    $bytesin = $1 if (/^[\* ]\s+incoming\s+$ARGV[1]\s+\:\s+(\d+)K/);
+    $bytesout = $1 if (/^[* ]\s+outgoing\s+$ARGV[1]\s+\:\s+(\d+)K/);
+}
+
+print "$bytesin\n$bytesout\n0\n\n";

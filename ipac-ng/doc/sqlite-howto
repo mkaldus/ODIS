@@ -1,0 +1,72 @@
+From: Friedrich Lobenstock <fl@fl.priv.at>
+To: ipac-ng-common@lists.sourceforge.net
+Subject: Re: [Ipac-ng-common] sqlite How-to?
+Reply-To: ipac-ng-common@lists.sourceforge.net
+Date: Fri, 13 Aug 2004 17:09:23 +0200
+
+BlueSpark@gmx.de wrote on 13.08.2004 16:02 MET:
+
+> 
+> I would really like to use the newly enabled sqlite DB with ipac-ng.
+> However, I cannot seem to find a tutorial or how-to or any other 
+> documentation on how to use it. I tried changing "postgre" to "sqlite" in 
+> the config file but that did not do it.
+
+Ok, here you go:
+
+Download and install SQLite from http://sqlite.org/, eg. get an RPM from 
+http://sqlite.org/download.html
+
+Configure, compile and install ipac-ng-1.30.
+
+The output of configure should look like this:
+   # ./configure
+   checking for gcc... gcc
+   ...
+   checking sqlite.h usability... yes
+   checking sqlite.h presence... yes
+   ...
+   checking for available storage methods... gdbm mysql sqlite plain-file postgre
+   ...
+
+In /etc/ipac.conf set
+   storage = sqlite
+   db name = ipac
+
+Then run
+   fetchipac -S
+to set up the iptables rules and run
+   fetchipac
+to fetch the data and store them in the database. The first call to fetchipac 
+without parameters should print "ipac-ng[sqlite]: creating logs table" which 
+basically means that the database file named ipac.db (=parameter 'db name' in 
+ipac.conf) got created at /var/lib/ipac.
+
+To access this database use the sqlite utility like this:
+   # sqlite /var/lib/ipac/ipac.db
+   SQLite version 2.8.14
+   Enter ".help" for instructions
+
+   sqlite> select * from logs;
+   TOTAL in|0|0|1092409104|somehost
+   TOTAL in|0|0|1092409106|somehost
+
+   sqlite> delete from logs where that_time=1092409104;
+   sqlite> select * from logs;
+   TOTAL in|0|0|1092409106|somehost
+
+   sqlite>
+
+See doc/postgres-db.sql for how the database table logs is defined.
+
+-- 
+MfG / Regards
+Friedrich Lobenstock
+____________________________________________________________________
+Friedrich Lobenstock                       Linux Services Lobenstock
+URL: http://www.lsl.at/                         Email: fl@fl.priv.at
+____________________________________________________________________
+_______________________________________________
+Ipac-ng-common mailing list
+Ipac-ng-common@lists.sourceforge.net
+https://lists.sourceforge.net/lists/listinfo/ipac-ng-common

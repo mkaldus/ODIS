@@ -1,0 +1,668 @@
+dnl $Id: configure.in,v 1.21 2011/11/04 19:14:39 smsoft Exp $
+dnl Process this file with autoconf to produce a configure script.
+AC_INIT(fetchipac.c)
+
+dnl ------------------------------------------------------------------------
+dnl developer "default default" configuration section (no need to edit for 
+dnl end users)
+dnl some default default values. Override with environment variable setting
+dnl name of variable is as those following without the '_default' in the
+dnl end
+dnl all these settings can be changed at run time anyway, though!
+
+dnl the default include path for postgres
+postgresql_inc_default=/usr/include/pgsql
+
+ipac_datadir_default=/var/lib/ipac
+ipac_reconflag_default=/var/lib/ipac/flag
+ipac_runfile_default=/var/run/ipac.rules
+ipac_pidfile_default=/var/run/ipac.pid
+ipac_lockfile_default=/var/lock/ipac.lck
+ipac_statusfile_default=/var/run/ipac.status
+
+ipac_ctrl_in_default=ipac_c_i
+ipac_ctrl_out_default=ipac_c_o
+ipac_in_default=ipac_in
+ipac_out_default=ipac_out
+
+dnl ipac_conffile_default=/etc/ipac.conf
+dnl ipac version number and manual time
+VERSION="1.34.2"
+MANTIME="SEPTEMBER 2011"
+dnl ------------------------------------------------------------------------
+
+dnl create config.h
+AC_CONFIG_HEADER(config.h)
+
+dnl output version number and man time
+AC_SUBST(VERSION)
+AC_DEFINE_UNQUOTED(VERSION,"$VERSION")
+AC_SUBST(MANTIME)
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_C_CONST
+AC_TYPE_SIZE_T
+
+dnl Checks for programs.
+MYPATH=$PATH:/sbin:/usr/sbin
+AC_PROG_CC
+test "$GCC" = "yes" && CFLAGS="$CFLAGS -Wall"
+AC_PROG_AWK
+if test "$AWK" = ""; then
+	AC_MSG_ERROR([awk not found])
+fi
+AC_PROG_YACC
+if test "$YACC" = "yacc"; then
+	AC_MSG_ERROR([bison or byacc not found, but required])
+fi
+AC_PROG_LEX
+if test "$LEX" != "flex"; then
+	AC_MSG_ERROR([flex not found, but required])
+fi
+AC_PATH_PROG(IPCHAINS,ipchains,,$MYPATH)
+AC_PATH_PROG(IPTABLES,iptables,,$MYPATH)
+AC_PATH_PROG(MKTEMP,mktemp,,$MYPATH)
+AC_PATH_PROGS(PERL,perl5 perl,,$MYPATH)
+
+AC_DEFINE_UNQUOTED(IPCHAINS,"$IPCHAINS")
+AC_SUBST(IPCHAINS)
+
+
+dnl check for library path options
+AC_ARG_WITH(postgresql_lib,
+	[  --with-postgresql-lib=DIR   location of postgresql library file],
+	[CPPFLAGS="$CPPFLAGS -L$withval"
+	postgresql_lib="-L$withval"])
+
+dnl check for include path options
+AC_ARG_WITH(postgresql_inc,
+	[  --with-postgresql-inc=DIR   location of postgresql include files],
+	[CPPFLAGS="-I$withval $CPPFLAGS"
+	  postgresql_inc="-I$withval"],
+	[CPPFLAGS="-I$postgresql_inc_default $CPPFLAGS"
+	  postgresql_inc="-I$postgresql_inc_default"])
+
+AC_ARG_WITH(iptables-src,
+	[  --with-iptables-src=DIR     location of iptables source tree to statically
+			      compile with instead of linking to dynamic ones],
+	[IPTABLES_SRC=$withval])
+
+dnl Checks for libraries.
+AC_CHECK_LIB(pq,     PQexec,           [HAVE_LIBPQ=yes],     [HAVE_LIBPQ=no])
+  test $HAVE_LIBPQ = no && AC_MSG_WARN([postgres library not found!
+	support for optional storage \"postgre\" will be disabled
+	hint: use the configure option '--with-postgresql-lib'])
+AC_CHECK_LIB(gdbm,   gdbm_open,        [HAVE_LIBGDBM=yes],   [HAVE_LIBGDBM=no])
+  test $HAVE_LIBGDBM = no && AC_MSG_WARN([gdbm library not found!
+	support for optional storage \"gdbm\" will be disabled])
+AC_CHECK_LIB(mysqlclient, mysql_query, [HAVE_LIBMYSQL=yes], [HAVE_LIBMYSQL=no])
+  test $HAVE_LIBMYSQL = no && AC_MSG_WARN([mysql library not found!
+	support for optional storage \"mysql\" will be disabled])
+AC_CHECK_LIB(sqlite, sqlite_get_table, [HAVE_LIBSQLITE=yes], [HAVE_LIBSQLITE=no])
+  test $HAVE_LIBSQLITE = no && AC_MSG_WARN([sqlite library not found!
+	support for optional storage \"sqlite\" will be disabled])
+
+LIBS="$LIBS -L. -lipac"
+
+dnl Checks for header files if libraries found
+HAVE_POSTGRE=no
+if test $HAVE_LIBPQ = yes; then
+	AC_CHECK_HEADERS(libpq-fe.h, [HAVE_POSTGRE=yes], [HAVE_POSTGRE=no])
+
+	if test $HAVE_POSTGRE = yes; then
+		CFLAGS="$CFLAGS $postgresql_inc"
+		LDFLAGS="$LDFLAGS $postgresql_lib"
+		#LDFLAGS="$LDFLAGS $postgresql_lib -lpq"
+	else
+		AC_MSG_WARN([postgres include file libpq-fe.h not found!
+	support for storage \"postgre\" will be disabled
+	hint: use the configure option '--with-postgresql-inc'])
+	fi
+fi		    
+
+HAVE_GDBM=no
+if test $HAVE_LIBGDBM = yes; then
+	AC_CHECK_HEADERS(gdbm.h, [HAVE_GDBM=yes], [HAVE_GDBM=no])
+
+	if test $HAVE_GDBM = no; then
+		AC_MSG_WARN([gdbm include file gdbm.h not found!
+	support for storage \"gdbm\" will be disabled])
+	fi
+fi
+
+HAVE_MYSQL=no
+if test $HAVE_LIBMYSQL = yes; then
+	AC_CHECK_HEADERS(mysql/mysql.h, [HAVE_MYSQL=yes], [HAVE_MYSQL=no])
+
+	if test $HAVE_MYSQL = no; then
+		AC_MSG_WARN([mysql include file mysql.h not found!
+	support for storage \"mysql\" will be disabled])
+	fi
+fi
+
+HAVE_SQLITE=no
+if test $HAVE_LIBSQLITE = yes; then
+	AC_CHECK_HEADERS(sqlite.h, [HAVE_SQLITE=yes], [HAVE_SQLITE=no])
+
+	if test $HAVE_SQLITE = no; then
+		AC_MSG_WARN([sqlite include file sqlite.h not found!
+	support for storage \"sqlite\" will be disabled])
+	fi
+fi
+
+dnl Checks for library functions.
+
+dnl ------------------------------
+dnl set application default values.
+dnl ------------------------------
+dnl ipac_datadir is the value of $ipac_datadir;
+dnl instead, it is the dir with the old data; instead, it is /var/lib/ipac
+AC_MSG_CHECKING([for default data directory])
+test -d /var/log/ip-acct && ipac_datadir=${ipac_datadir:-/var/log/ip-acct}
+
+ipac_datadir="${ipac_datadir:-$ipac_datadir_default}"
+AC_MSG_RESULT($ipac_datadir)
+dnl run file and fetchipac lock file
+AC_MSG_CHECKING(for default run file name)
+RUNFILE=${RUNFILE:-$ipac_runfile_default}
+AC_MSG_RESULT($RUNFILE)
+dnl pid file check
+AC_MSG_CHECKING(for default pid file name)
+PIDFILE=${PIDFILE:-$ipac_pidfile_default}
+AC_MSG_RESULT($PIDFILE)
+dnl reconfig flag file check
+AC_MSG_CHECKING(for default flag file name)
+RECONFLAG=${RECONFLAG:-$ipac_reconflag_default}
+AC_MSG_RESULT($RECONFLAG)
+dnl default status file check
+AC_MSG_CHECKING(for default status file name)
+STATUSFILE=${STATUSFILE:-$ipac_statusfile_default}
+AC_MSG_RESULT($STATUSFILE)
+AC_MSG_CHECKING(for default fetchipac lock file name)
+LOCKFILE=${LOCKFILE:-$ipac_lockfile_default}
+AC_MSG_RESULT($LOCKFILE)
+
+CH_CTRL_IN=$ipac_ctrl_in_default
+CH_CTRL_OUT=$ipac_ctrl_out_default
+CH_INNAME=$ipac_in_default
+CH_OUTNAME=$ipac_out_default
+
+AC_MSG_CHECKING(for tmp directory)
+TMP=${TMP:-/tmp}
+AC_MSG_RESULT($TMP)
+AC_SUBST(TMP)
+DATDELIM="#-#-#-#-#"
+AC_SUBST(DATDELIM)
+AC_DEFINE_UNQUOTED(DATDELIM,"$DATDELIM")
+AC_MSG_CHECKING(for maximum rule name length)
+MAX_RULE_NAME_LENGTH=${MAX_RULE_NAME_LENGTH:-32}
+AC_MSG_RESULT($MAX_RULE_NAME_LENGTH)
+AC_DEFINE_UNQUOTED(MAX_RULE_NAME_LENGTH,$MAX_RULE_NAME_LENGTH)
+
+dnl -----------------------------------
+dnl ----- decisions about storage backends
+dnl -----------------------------------
+AC_MSG_CHECKING([for available storage methods])
+STORAGEMETHODS=`(cd storage && find . -type d -not -name "sharedsql" \
+		-not -name "CVS" -not -name "." -print) | \
+		sed -e 's#^\./##' | tr '\n' ' '`
+AC_SUBST(STORAGEMETHODS)
+storagemethod_makefiles=""
+STORAGEMETHODLIBRARYS=""
+for sm in $STORAGEMETHODS; do
+	ADDLIBS=`grep 'NEEDLIBS=' storage/$sm/Makefile.in | \
+			sed -e 's/^# *NEEDLIBS=//' -e 's/ *$//'`
+
+	dnl test if we are trying to compile with postgre and there is libpq
+	if test $sm = postgre; then
+	    if test $HAVE_POSTGRE = no; then
+		dnl AC_MSG_WARN([PQ library not found, omitting postgre storage])
+		STORAGEMETHODS=`echo $STORAGEMETHODS|sed -e 's/postgre \?//'`
+		continue
+	    fi
+	fi
+
+	dnl test if we are trying to compile with gdbm and there is libgdbm
+	if test $sm = gdbm; then
+	    if test $HAVE_GDBM = no; then
+		dnl AC_MSG_WARN([GDBM library not found, omitting gdbm storage])
+		STORAGEMETHODS=`echo $STORAGEMETHODS|sed -e 's/gdbm \?//'`
+		continue
+	    fi
+	fi
+
+	dnl test if we are trying to compile with mysql and if the library is there
+	if test $sm = mysql; then
+	    if test $HAVE_MYSQL = no; then
+		dnl AC_MSG_WARN([MySQL library not found, omitting mysql storage])
+		STORAGEMETHODS=`echo $STORAGEMETHODS|sed -e 's/mysql \?//'`
+		continue
+	    fi
+	fi
+
+	dnl test if we are trying to compile with sqlite and if the library is there
+	if test $sm = sqlite; then
+	    if test $HAVE_SQLITE = no; then
+		dnl AC_MSG_WARN([Sqlite library not found, omitting sqlite storage])
+		STORAGEMETHODS=`echo $STORAGEMETHODS|sed -e 's/sqlite \?//'`
+		continue
+	    fi
+	fi
+
+	storagemethod_makefiles="$storagemethod_makefiles storage/$sm/Makefile"
+	STORAGEMETHODLIBRARYS="$STORAGEMETHODLIBRARYS storage/$sm/libstor$sm.a"
+	LIBS="$LIBS -Lstorage/$sm -lstor$sm"
+	dnl check if the storage method requires any libraries.
+	test -n "$ADDLIBS" && LIBS="$LIBS $ADDLIBS"
+done
+AC_MSG_RESULT($STORAGEMETHODS)
+AC_SUBST(STORAGEMETHODLIBRARYS)
+
+dnl Check for the default storage to use
+AC_MSG_CHECKING([for default storage method])
+IP_COMMENT=""
+AC_ARG_ENABLE(default-storage, 
+[  --enable-default-storage=storage   use storage method storage by default.
+                          Possible storage methods are plain-file
+                          and gdbm and any additional ones which are stored
+			  under storage/. The default depends on your
+                          system.],
+	DEFAULT_STORAGE=$enableval,DEFAULT_STORAGE="")
+if test x$DEFAULT_STORAGE = x; then
+	if test $HAVE_LIBGDBM = no; then
+		dnl AC_MSG_WARN([gdbm is not accessible - bad, trying postgre])
+		if test $HAVE_POSTGRE = no; then
+			DEFAULT_STORAGE=plain-file
+			IP_COMMENT=" (consider installing postgre!)"
+		else
+			DEFAULT_STORAGE=postgre
+		fi
+	else
+		DEFAULT_STORAGE=gdbm
+		IP_COMMENT=" (default)"
+	fi
+else
+	IP_COMMENT=" (set by user)"
+fi
+AC_MSG_RESULT([$DEFAULT_STORAGE$IP_COMMENT])
+AC_DEFINE_UNQUOTED(DEFAULT_STORAGE,"$DEFAULT_STORAGE")
+AC_SUBST(DEFAULT_STORAGE)
+
+dnl -----------------------------------
+dnl ----- decisions about access agents
+dnl -----------------------------------
+AC_MSG_CHECKING([for available access agents])
+BILLAGENTS=`(cd access && find . -type d -print) | 
+		sed -e 's#^\./##' | egrep -v '\.|CVS' | tr '\n' ' '`
+AC_SUBST(BILLAGENTS)
+billagent_makefiles=""
+BILLAGENTSLIBRARYS=""
+for ag in $BILLAGENTS; do
+	ADDLIBS=`grep 'NEEDLIBS=' access/$ag/Makefile.in | \
+			sed -e 's/^# *NEEDLIBS=//' -e 's/ *$//'`
+	if test $ag = postgre; then
+	    if test x$HAVE_LIBPQ = x; then
+		AC_MSG_WARN([PQ library not found, omitting postgre access])
+		BILLAGENTS=`echo $BILLAGENTS|sed -e 's/postgre//'`
+		continue
+	    fi
+	fi
+	billagent_makefiles="$billagent_makefiles access/$ag/Makefile"
+	BILLAGENTSLIBRARYS="$BILLAGENTSLIBRARYS access/$ag/libipac$ag.a"
+	LIBS="$LIBS -Laccess/$ag -lipac$ag"
+	dnl check if the access agents requires any libraries.
+	test -n "$ADDLIBS" && LIBS="$LIBS $ADDLIBS"
+done
+AC_MSG_RESULT($BILLAGENTS)
+AC_SUBST(BILLAGENTSLIBRARYS)
+
+dnl Check for the default access to use
+AC_MSG_CHECKING([for default access agent])
+IP_COMMENT=""
+AC_ARG_ENABLE(default-access, 
+[  --enable-default-access=files   set default access agent.
+                          Possible access agents are files (dumb)
+                          and any additional ones which are stored
+                          under access/. The default depends on your
+                          system. REMARK: DO NOT USE THIS OPTION! It 
+                          is fixed to files from version 1.28 upwards!],
+	DEFAULT_ACCESS=$enableval,DEFAULT_ACCESS="")
+if test x$DEFAULT_ACCESS = x; then
+	DEFAULT_ACCESS=files
+	IP_COMMENT="  (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+AC_MSG_RESULT([$DEFAULT_ACCESS$IP_COMMENT])
+AC_DEFINE_UNQUOTED(DEFAULT_ACCESS,"$DEFAULT_ACCESS")
+AC_SUBST(DEFAULT_ACCESS)
+
+dnl Check for default config directory
+AC_MSG_CHECKING([for default config directory])
+IP_COMMENT=""
+AC_ARG_WITH(confdir,
+[  --with-confdir=directory    use default directory for config files,
+			      default is /etc/ipac-ng],
+	CONFDIR=$withval,CONFDIR="")
+if test x$CONFDIR = x; then
+	CONFDIR="/etc/ipac-ng"
+	IP_COMMENT=" (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+AC_MSG_RESULT([$CONFDIR$IP_COMMENT])
+AC_DEFINE_UNQUOTED(CONFDIR,"$CONFDIR")
+AC_SUBST(CONFDIR)
+
+dnl Check for default config file
+AC_MSG_CHECKING([for default config file])
+IP_COMMENT=""
+AC_ARG_WITH(config,
+[  --with-config=config        use default config file,
+			      default is CONFDIR/ipac.conf],
+	CONFFILE=$withval,CONFFILE="")
+if test x$CONFFILE = x; then
+	CONFFILE="$CONFDIR/ipac.conf"
+	IP_COMMENT=" (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+AC_MSG_RESULT([$CONFFILE$IP_COMMENT])
+AC_DEFINE_UNQUOTED(CONFFILE,"$CONFFILE")
+AC_SUBST(CONFFILE)
+
+dnl -----------------------------------
+dnl ----- decisions about accounting agents
+dnl -----------------------------------
+AC_MSG_CHECKING([for available accounting agents])
+ACCAGENTS0=`(cd agents && find . -type d -print) | 
+ 		sed -e 's#^\./##' | egrep -v '\.|CVS|iptables/libiptc' | tr '\n' ' '`
+accagent_makefiles=""
+ACCAGENTSLIBRARYS=""
+ACCAGENTS=""
+for ag in $ACCAGENTS0; do
+	if test -f "agents/$ag/Makefile.in"; then
+		ACCAGENTS="$ACCAGENTS $ag"
+		accagent_makefiles="$accagent_makefiles agents/$ag/Makefile"
+		ACCAGENTSLIBRARYS="$ACCAGENTSLIBRARYS agents/$ag/libipac$ag.a"
+		LIBS="$LIBS -Lagents/$ag -lipac$ag"
+		dnl check if the accounting agents requires any libraries.
+		ADDLIBS=`grep 'NEEDLIBS=' agents/$ag/Makefile.in | \
+			sed -e 's/^# *NEEDLIBS=//' -e 's/ *$//'`
+		test -n "$ADDLIBS" && LIBS="$LIBS $ADDLIBS"
+	fi
+done
+AC_SUBST(ACCAGENTS)
+AC_MSG_RESULT($ACCAGENTS)
+AC_SUBST(ACCAGENTSLIBRARYS)
+
+dnl Check for the default accounting agent to use
+AC_MSG_CHECKING([for default accounting agent])
+IP_COMMENT=""
+AC_ARG_ENABLE(default-agent, 
+[  --enable-default-agent=agent   use accounting agent by default.
+                          Possible accounting agents is ipchains
+                          and any additional ones which are stored
+			  under agents/. The default is iptables.],
+	DEFAULT_AGENT=$enableval,DEFAULT_AGENT="")
+if test x$DEFAULT_AGENT = x; then
+	if test ! x$IPTABLES = x; then
+		DEFAULT_AGENT="iptables"
+		IP_COMMENT=" (default)"
+	elif test ! x$IPCHAINS = x; then
+		DEFAULT_AGENT="ipchains"
+		IP_COMMENT=" (default)"
+	else
+		AC_MSG_ERROR([iptables nor ipchains found, aborting..])
+	fi
+else
+	IP_COMMENT=" (set by user)"
+fi
+if test x$IPCHAINS = x; then
+	ACCAGENTS=`echo $ACCAGENTS|sed -e 's/ipchains//'`
+	ACCAGENTSLIBRARYS=`echo $ACCAGENTSLIBRARYS|sed -e 's/agents\/ipchains\/libipacipchains.a//'`
+	LIBS=`echo $LIBS|sed -e 's/-Lagents\/ipchains//'`
+	LIBS=`echo $LIBS|sed -e 's/-lipacipchains//'`
+	accagent_makefiles=`echo $accagent_makefiles|sed -e 's/agents\/ipchains\/Makefile//'`
+fi
+if test  x$IPTABLES = x; then
+	ACCAGENTS=`echo $ACCAGENTS|sed -e 's/iptables//'`
+	ACCAGENTSLIBRARYS=`echo $ACCAGENTSLIBRARYS|sed -e 's/agents\/iptables\/libipaciptables.a//'`
+	LIBS=`echo $LIBS|sed -e 's/-Lagents\/iptables//'`
+	LIBS=`echo $LIBS|sed -e 's/-lipaciptables//'`
+	accagent_makefiles=`echo $accagent_makefiles|sed -e 's/agents\/iptables\/Makefile//'`
+fi
+AC_MSG_RESULT([$DEFAULT_AGENT$IP_COMMENT])
+AC_DEFINE_UNQUOTED(DEFAULT_AGENT,"$DEFAULT_AGENT")
+AC_SUBST(DEFAULT_AGENT)
+
+dnl Check if ipacsum debugging is on
+AC_MSG_CHECKING([if ipacsum debugging is desired])
+IP_COMMENT=""
+AC_ARG_ENABLE(debug-ipacsum, 
+[  --enable-debug-ipacsum=yes|no    enable debugging in ipacsum.],
+	DEBUG_IPACSUM=$enableval,DEBUG_IPACSUM="")
+if test x$DEBUG_IPACSUM = x; then
+	DEBUG_IPACSUM="no"
+	IP_COMMENT=" (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+if test x$DEBUG_IPACSUM = xyes; then 
+	DBSTRIP=""
+else
+	DBSTRIP="dbstrip"
+fi
+AC_MSG_RESULT([$DEBUG_IPACSUM$IP_COMMENT])
+AC_SUBST(DBSTRIP)
+
+dnl Check if database debugging is on
+AC_MSG_CHECKING([if database debugging is desired])
+IP_COMMENT=""
+AC_ARG_ENABLE(debug-database, 
+[  --enable-debug-database=yes|no   switch on debugging of all accesses
+			  to the backend database.],
+	DEBUG_DATABASE=$enableval,DEBUG_DATABASE="")
+if test x$DEBUG_DATABASE = x; then
+	DEBUG_DATABASE="no"
+	IP_COMMENT=" (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+if test x$DEBUG_DATABASE = xyes; then 
+	CFLAGS="$CFLAGS -DDEBUG_DB"
+else
+	DEBUG_DATABASE="no"
+fi
+AC_MSG_RESULT([$DEBUG_DATABASE$IP_COMMENT])
+
+dnl Check for programs in place.
+if test $cross_compiling = no; then
+	if test ! -d /proc/net; then
+		AC_MSG_WARN(
+			[/proc not there. cant determine firewall system type])
+	elif test -f /proc/net/ip_fwchains; then
+		test -z "$IPCHAINS" && AC_MSG_WARN([required program ipchains not there])
+		test -z "$AWK" && AC_MSG_WARN([required program awk not there])
+		test -z "$MKTEMP" && AC_MSG_WARN([required program mktemp not there])
+        elif test -f /proc/net/ip_tables_names; then
+		test -z "$IPTABLES" && AC_MSG_WARN([required program iptables not there])
+        else
+                AC_MSG_WARN([firewall module missing in kernel])
+	fi
+fi
+
+if test $DEFAULT_AGENT = iptables; then
+	# test for the 64 bit libs first (18.04.2004 - Thomas Zehetbauer <thomasz@hostmaster.org>)
+	if test -d /usr/lib64/xtables; then
+		XTABLES_LIBDIR=/usr/lib64/xtables
+	elif test -d /lib64/xtables; then
+		XTABLES_LIBDIR=/lib64/xtables
+	elif test -d /usr/local/lib64/xtables; then
+		XTABLES_LIBDIR=/usr/local/lib64/xtables
+	elif test -d /usr/lib/xtables; then
+		XTABLES_LIBDIR=/usr/lib/xtables
+	elif test -d /lib/xtables; then
+		XTABLES_LIBDIR=/lib/xtables
+	elif test -d /usr/local/lib/xtables; then
+		XTABLES_LIBDIR=/usr/local/lib/xtables
+	else
+		AC_MSG_WARN([iptables library directory not found, define ]
+				[it at config.h])
+	fi
+	IPTSLIBS=""		
+	IPTSINC=""
+	IPTSSRC=""
+	IPTDOBEFORECC=""
+	IPTDOAFTERCC=""
+        if test x$IPTABLES_SRC = x; then
+		AC_CHECK_HEADERS(xtables.h, [], [AC_MSG_ERROR([xtables.h not found. Install iptables-dev package.])])
+		AC_CHECK_HEADERS(libiptc/libiptc.h, [], [AC_MSG_ERROR([libiptc.h not found. Install iptables-dev package.])])
+		save_libs=$LIBS
+		LIBS=""
+                AC_SEARCH_LIBS([xtables_init], [xtables], [], [AC_MSG_ERROR([libxtables not found. Install iptables with shared libraries support.])])
+		save_libs="$save_libs $LIBS"		
+		LIBS=""
+                AC_SEARCH_LIBS([iptc_init], [iptc ip4tc], [], [AC_MSG_ERROR([libiptc or libip4tc not found. Install iptables with shared libraries support.])])
+		LIBS="$save_libs $LIBS"
+        else
+		IPTSINC="-I'$IPTABLES_SRC/include'"
+		dnl Search for iptables source file
+		dnl $1 - source file name
+		dnl $2 - source file name with subdir in iptables source tree
+		dnl $3 - result .o file name
+		dnl $4 - additional actions if found
+		dnl $5 - additional actions if not found
+		AC_DEFUN([IPAC_SEARCH_IPTABLES_SRCFILE],
+			iptsrcfiledest=$PWD/agents/iptables/$1
+			AS_SET_CATFILE(iptsrcfileabs, $IPTABLES_SRC, $2)
+			AC_CHECK_FILE($iptsrcfileabs, [
+				IPTDOBEFORECC="$IPTDOBEFORECC ln -s -f -T '$iptsrcfileabs' '$iptsrcfiledest';"
+				IPTDOAFTERCC="$IPTDOAFTERCC rm -f '$iptsrcfiledest';"
+				IPTSLIBS="$IPTSLIBS $3"
+				IPTSSRC="$IPTSSRC $1"
+				$4
+				],[:;$5])
+		)
+
+		IPAC_SEARCH_IPTABLES_SRCFILE(xtables.c,xtables.c,xtables.o,
+			[
+				IPAC_SEARCH_IPTABLES_SRCFILE(xshared.h,xshared.h)
+				IPAC_SEARCH_IPTABLES_SRCFILE(xtoptions.c,xtoptions.c,xtoptions.o)
+			],
+			[
+				IPAC_SEARCH_IPTABLES_SRCFILE(xtables.c,iptables/xtables.c,xtables.o,
+					[
+						IPTDOBEFORECC="$IPTDOBEFORECC mkdir -p '$PWD/agents/iptables/iptables'; ln -s -f -T '$PWD/agents/iptables/internal.h' '$PWD/agents/iptables/iptables/internal.h';"
+						IPTDOAFTERCC="$IPTDOAFTERCC rm -f -r '$PWD/agents/iptables/iptables';"
+					],
+					[AC_MSG_ERROR([xtables.c not found. Check path to iptables source tree.])]
+				)
+				IPAC_SEARCH_IPTABLES_SRCFILE(xshared.h,iptables/xshared.h)
+				IPAC_SEARCH_IPTABLES_SRCFILE(xtoptions.c,iptables/xtoptions.c,xtoptions.o)
+			]
+		)
+
+		IPTSRCFILES="libiptc/libiptc.c libiptc/libip4tc.c libiptc/linux_list.h libiptc/linux_stddef.h"
+		for iptsrcfile1 in $IPTSRCFILES; do
+			iptsrcfile=`echo $iptsrcfile1 | cut -d/ -f2`
+			iptsrcfiledest=$PWD/agents/iptables/$iptsrcfile
+			AS_SET_CATFILE(iptsrcfileabs, $IPTABLES_SRC, $iptsrcfile1)
+			AC_CHECK_FILE($iptsrcfileabs, [], [AC_MSG_ERROR([$iptsrcfileabs not found. Check path to iptables source tree.])])
+			IPTDOBEFORECC="$IPTDOBEFORECC ln -s -f -T '$iptsrcfileabs' '$iptsrcfiledest';"
+			IPTDOAFTERCC="$IPTDOAFTERCC rm -f '$iptsrcfiledest';"
+			IPTSSRC="$IPTSSRC $iptsrcfile"
+		done
+		AS_SET_CATFILE(iptsrcfileabs, $IPTABLES_SRC, include/xtables.h)
+		AC_CHECK_FILE($iptsrcfileabs, [], [AC_MSG_ERROR([xtables.h not found. Have you configured iptables source tree?])])
+		AS_SET_CATFILE(iptsrcfileabs, $IPTABLES_SRC, include/libiptc/libiptc.h)
+		AC_CHECK_FILE($iptsrcfileabs, [], [AC_MSG_ERROR([libiptc.h not found. Iptables source tree is incomplete.])])
+		AC_CHECK_HEADERS([linux/magic.h linux/proc_fs.h])
+		IPTSLIBS="$IPTSLIBS libip4tc.o"
+		save_libs=$LIBS
+		LIBS=""
+                AC_SEARCH_LIBS([dlopen], [dl], [], [AC_MSG_ERROR([libdl not found.])])
+		LIBS="$save_libs $LIBS"
+        fi
+
+	AC_SUBST(IPTSLIBS)
+	AC_SUBST(IPTSINC)
+	AC_SUBST(IPTSSRC)
+	AC_SUBST(XTABLES_LIBDIR)
+	AC_SUBST(IPTDOBEFORECC)
+	AC_SUBST(IPTDOAFTERCC)
+
+fi
+
+AC_DEFUN([IPAC_DEFINE_AND_SUBST],
+	[$1=$2]
+	[AC_SUBST($1)]
+	[AC_DEFINE_UNQUOTED($1,"$$1")])
+IPAC_DEFINE_AND_SUBST(IPFWADM_PROC,/proc/net/ip_acct)
+IPAC_DEFINE_AND_SUBST(IPCHAINS_PROC_C,/proc/net/ip_fwchains)
+IPAC_DEFINE_AND_SUBST(IPCHAINS_PROC_N,/proc/net/ip_fwnames)
+
+AC_SUBST(CH_CTRL_IN)
+AC_DEFINE_UNQUOTED(CH_CTRL_IN,"$CH_CTRL_IN")
+AC_SUBST(CH_CTRL_OUT)
+AC_DEFINE_UNQUOTED(CH_CTRL_OUT,"$CH_CTRL_OUT")
+AC_SUBST(CH_INNAME)
+AC_DEFINE_UNQUOTED(CH_INNAME,"$CH_INNAME")
+AC_SUBST(CH_OUTNAME)
+AC_DEFINE_UNQUOTED(CH_OUTNAME,"$CH_OUTNAME")
+
+AC_SUBST(ipac_datadir)
+AC_DEFINE_UNQUOTED(ACCTDIR,"$ipac_datadir")
+
+AC_SUBST(RUNFILE)
+AC_DEFINE_UNQUOTED(RUNFILE,"$RUNFILE")
+
+AC_SUBST(PIDFILE)
+AC_DEFINE_UNQUOTED(PIDFILE,"$PIDFILE")
+
+AC_SUBST(RECONFLAG)
+AC_DEFINE_UNQUOTED(RECONFLAG,"$RECONFLAG")
+
+AC_SUBST(STATUSFILE)
+AC_DEFINE_UNQUOTED(STATUSFILE,"$STATUSFILE")
+
+AC_SUBST(LOCKFILE)
+AC_DEFINE_UNQUOTED(LOCKFILE,"$LOCKFILE")
+
+dnl Check for default database name
+AC_MSG_CHECKING([for default database name])
+IP_COMMENT=""
+AC_ARG_WITH(dbase-name,
+[  --with-dbase-name=name      use default database name, 
+			      default is ipac],
+	DBASE=$withval,DBASE="")
+if test x$DBASE = x; then
+	DBASE="ipac"
+	IP_COMMENT=" (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+AC_MSG_RESULT([$DBASE$IP_COMMENT])
+AC_DEFINE_UNQUOTED(DBASE,"$DBASE")
+AC_SUBST(DBASE)
+
+dnl Check for default database port
+AC_MSG_CHECKING([for default database port])
+IP_COMMENT=""
+AC_ARG_WITH(dbase-port,
+[  --with-dbase-port=port      use default database port, 
+			      default is NULL (database is local)],
+	DBASE_PORT=$withval,DBASE_PORT="")
+if test x$DBASE_PORT = x; then
+	DBASE_PORT=""
+	IP_COMMENT=" (default)"
+else
+	IP_COMMENT=" (set by user)"
+fi
+AC_MSG_RESULT([$DBASE_PORT$IP_COMMENT])
+AC_DEFINE_UNQUOTED(DBASE_PORT,"$DBASE_PORT")
+AC_SUBST(DBASE_PORT)
+
+AC_OUTPUT(Makefile storage/Makefile agents/Makefile access/Makefile \
+	    subst-config $billagent_makefiles $accagent_makefiles \
+	    $storagemethod_makefiles ipactest)

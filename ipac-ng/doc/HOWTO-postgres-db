@@ -1,0 +1,160 @@
+HOWTO - creating the database tablesin postgres for ipac-ng 
+        running on SuSE 8.0
+
+------------------------------------------------------------------
+  Should mostly also apply to other distributions. Of course
+  with a little differences here and there, but your milage 
+  may vary.
+
+  If you can test this on your distribution and write down what
+  is different, or create a little howto yourself and send it
+  to us we and other users would be very thankfull about your 
+  contribution.
+------------------------------------------------------------------
+
+* A good tool to access your postgresql database is phpPgAdmin 
+* Get it at http://phppgadmin.sourceforge.net/
+
+The following howto will take you step by step through all what has
+to be done to get the ipac database initialzed on a fresh installed
+postgres database server on SuSE 8.0. 
+
+1) Check if you have all postgres packages installed:    (SuSE specific!)
+     # rpm -qa | sort | grep postgresql
+     postgresql-7.2-90
+     postgresql-contrib-7.2-90
+     postgresql-devel-7.2-90
+     postgresql-docs-7.2-90
+     postgresql-libs-7.2-90
+     postgresql-perl-7.2-90
+     postgresql-server-7.2-90
+
+   otherwise install them with:
+     # rpm -ivh postgresql-7.2-90.i386.rpm \
+     postgresql-contrib-7.2-90.i386.rpm \
+     postgresql-devel-7.2-90.i386.rpm \
+     postgresql-docs-7.2-90.i386.rpm \
+     postgresql-libs-7.2-90.i386.rpm \
+     postgresql-perl-7.2-90.i386.rpm \
+     postgresql-server-7.2-90.i386.rpm
+     postgresql-libs      ##################################################
+     postgresql           ##################################################
+     postgresql-contrib   ##################################################
+     postgresql-devel     ##################################################
+     postgresql-docs      ##################################################
+     postgresql-perl      ##################################################
+     postgresql-server    ##################################################
+     Updating etc/sysconfig/postgresql...
+
+    (note: postgresql-libs might be already installed because of other 
+     dependences)
+
+   Now tell the SuSE /tmp-cleaner to leave the socket in /tmp by editing
+   the variable OWNER_TO_KEEP_IN_TMP in /etc/sysconfig/cron to contain the 
+   username "postgres". This will take care that the database socket in /tmp
+   will not be removed.
+
+2) Start the database server for the first time
+     # rcpostgresql start
+     Initializing the PostgreSQL database at \
+       location /var/lib/pgsql/data                              done
+     Starting PostgreSQL                                         done
+
+   now tell the system to start the postgres database server everytime the
+   machine starts:
+     # insserv postgresql
+
+   Remark: rcpostgresql is probably /etc/init.d/postgresql or similar
+           on none SuSE systems
+
+3) As user postgres create a user "ipac" which will later be used for 
+   ipac-ng's fetchipac
+     # createuser -U postgres -P -E -D -A ipac
+     Enter password for user "ipac": xxxxxxxx
+     Enter it again: xxxxxxxx
+     CREATE USER
+
+4) As user postgres create the table "ipac" which will later be used for 
+   ipac-ng
+     # createdb -U postgres ipac
+     CREATE DATABASE
+
+5) First edit the file postgres-db.sql with your prefered editor and adapt
+   the hostname field accordingly to the instructions at the top of this
+   file and now we fill our database ipac with tables and grant the users
+   their specific rights
+
+     # psql -U postgres ipac < postgres-db.sql
+
+   Note: If this is the first time that you initialize the ipac database it
+   it is normal that you see messages like
+         ERROR:  table "xyz" does not exist
+
+   Note: Don't do this if you did already create the tables and there's data 
+   in them because this step will definitely destroy all previous data!
+
+6) Now we assign a password to the database admin user postgres
+
+     # psql -U postgres ipac
+     Welcome to psql, the PostgreSQL interactive terminal.
+
+     Type:  \copyright for distribution terms
+            \h for help with SQL commands
+            \? for help on internal slash commands
+            \g or terminate with semicolon to execute query
+            \q to quit
+
+     ipac-# ALTER USER postgres WITH UNENCRYPTED PASSWORD 'xxxxxxxx';  
+     ipac-# \q
+ 
+     note: set 'xxxxxxxx' to a password of your choice ;-)
+     note: ENCRYPTED PASSWORD can somehow not be used :-(
+
+7) Now tell postgres to not allow access without a password. Edit
+   the file "~postgres/data/pg_hba.conf" so that the following lines  
+
+     # TYPE     DATABASE    IP_ADDRESS    MASK               AUTH_TYPE  AUTH_ARGUMENT
+     local      all                                          trust
+     host       all         127.0.0.1     255.255.255.255    trust
+
+   are changed to
+     # TYPE     DATABASE    IP_ADDRESS    MASK               AUTH_TYPE  AUTH_ARGUMENT
+     local      all                                          password
+     host       all         127.0.0.1     255.255.255.255    password
+
+   Note: before you start editing do a "su postgres"
+
+8) Now the database server needs to be stopped and started again
+     # rcpostgresql stop
+     Shutting down PostgreSQL                 done
+   
+   now check with "ps fwxa" that the postgres process named "postmaster" has ended, then do
+
+     # rcpostgresql stop
+     Starting PostgreSQL                      done
+
+   Remark: rcpostgresql is probably /etc/init.d/postgresql or similar
+           on none SuSE systems
+
+9) Now you can start configuring and installing iapc-ng
+ 
+     ./configure --enable-default-storage=postgre   # optionaly add "--prefix=/usr"
+     make
+     make install
+
+10) ipac-ng needs to have the config files ipac.conf and rules.conf
+    installed in /etc/ipac-ng. In rules.conf you can then install your
+    accounting rules
+
+     mkdir /etc/ipac-ng
+     cp ipac.conf.sample /etc/ipac-ng/ipac.conf
+     cp rules.conf.sample /etc/ipac-ng/rules.conf
+     
+    Note: You need to edit /etc/ipac-ng/ipac.conf and set the password we
+          defined for the user ipac in step 3
+
+11) In case the database server can not be reached ipac-ng needs a spool
+    directory where it saves the data in a files named "spool"
+
+     mkdir /var/lib/ipac
+

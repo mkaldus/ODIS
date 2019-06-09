@@ -1,0 +1,28 @@
+# $Id: Makefile.in,v 1.4 2004/04/18 21:02:36 friedl Exp $
+# Makefile for plain-file
+BMETHOD=files
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+LEX=@LEX@
+YACC=@YACC@
+
+all: libipac$(BMETHOD).a
+
+libipac$(BMETHOD).a: files.o rules.tab.o rules.yy.o
+	ar -crus libipac$(BMETHOD).a $?
+
+rules.tab.c: rules.y
+	$(YACC) -d -b rules -p rules rules.y
+
+rules.yy.c: rules.tab.c rules.l
+	$(LEX) -orules.yy.c -Prules rules.l
+
+%.o: %.c ../../config.h ../../ipac.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f rules.tab.c rules.tab.h rules.yy.c libipacfiles.a *.o
+
+distclean: clean
+	rm -f Makefile *~ *.orig

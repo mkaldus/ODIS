@@ -1,0 +1,22 @@
+# $Id: Makefile.in,v 1.1 2004/06/13 01:14:31 friedl Exp $
+# Makefile for sqlite
+# NEEDLIBS=-lsqlite
+SMETHOD=sqlite
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+
+all: libstor$(SMETHOD).a
+
+libstor$(SMETHOD).a: sqlite.o
+	ar -crus libstor$(SMETHOD).a $?
+
+%.o: %.c ../../config.h ../../ipac.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f *.a *.o
+
+distclean: clean
+	rm -f Makefile *~
+

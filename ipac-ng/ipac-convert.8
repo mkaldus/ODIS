@@ -1,0 +1,87 @@
+.\" Process this file with
+.\" groff -man -Tascii foo.1
+.\" $Id: ipac-convert.8,v 1.12 2011/09/25 23:21:09 smsoft Exp $
+.\"
+.\" =()<.TH IPAC-CONVERT 8 "@<MANTIME>@" Linux "IPAC-NG">()=
+.TH IPAC-CONVERT 8 "SEPTEMBER 2011" Linux "IPAC-NG"
+.SH NAME
+ipac-convert \- convert ipac accounting data
+.SH SYNOPSIS
+.B ipac-convert 
+[
+.B -f|--fetchipac FETCHIPAC
+]
+[
+.B -n|--nothing
+]
+[
+.B --start-step N
+]
+[
+.B --end-step N
+]
+.B source_dir source_storage dest_dir dest_storage
+.SH DESCRIPTION
+.B ipac-convert
+is part of the 
+.B ipac
+linux ip accounting package.
+
+.B ipac-convert
+reads all data stored
+in an ipac database as created by 
+.BR fetchipac (8)
+and copies it into another. It is able to access both databases through
+different storage methods and thus can convert between different database
+types.
+
+On normal operation, 
+.B ipac-convert
+reads the data from the database in the directory
+.B source_dir
+and copies it to the database in the directory
+.BR dest_dir .
+The source database is accessed through the storage method
+.B source_storage
+and the destination database is accessed through the storage method
+.BR dest_storage .
+.SH OPTIONS
+.IP -f|--fetchipac FETCHIPAC
+Tell
+.B ipac-convert
+which fetchipac to use. (ipac-convert needs fetchipac to access databases.)
+.IP -n|--nothing
+Don't actually do anything, but print the commands that would have been
+executed. This shows how ipac's database is accessed through
+.B fetchipac
+pretty well.
+.IP --start-step N, --stop-step N
+.B ipac-convert
+runs in four steps. Each step consists of one call to
+.BR fetchipac .
+All these calls are normally connected in a pipeline. Using these options,
+the pipline is broken up; using --start-step will remove calls in front
+of the pipeline, resulting in 
+.B ipac-convert
+waiting for input on stdin; using --end-step will remove calls at the
+back of the pipeline, resulting in
+.B ipac-convert
+to emit data on stdout. The numeric argument to these options is a step
+number 1 ... 4.
+
+The steps are: (1) list timestamps of source; (2) strip timestamp count
+line (that is the first line); (3) list records from source and (4) 
+store records in destination.
+.SH BUGS
+If the source database is corrupted, results are undefined.
+.SH VERSION
+.\" =()<This man page belongs to ipac version @<VERSION>@.>()=
+This man page belongs to ipac version 1.34.2.
+For updates and other
+information, look at 
+.B http://sourceforge.net/projects/ipac-ng
+.SH AUTHOR
+Moritz Both <moritz@daneben.de>
+Al Zaharov <kaiser13@mail2000.ru>
+.SH "SEE ALSO"
+.BR fetchipac (8)

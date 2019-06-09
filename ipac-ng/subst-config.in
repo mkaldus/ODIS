@@ -1,0 +1,66 @@
+# $Id: subst-config.in,v 1.4 2004/04/11 21:30:41 friedl Exp $
+# automatic subst configuration for ipac
+#
+# Some things we need to expand other things.
+prefix		@prefix@
+exec_prefix	@exec_prefix@
+#
+# Where to install the scripts.
+INSTALLPATH	@sbindir@
+#
+# directory for ip accounting data files
+ACCTDIR		@ipac_datadir@
+#
+# File with ip accounting status information
+RUNFILE		@RUNFILE@
+#
+# ipac.conf default ip accounting rule file
+RULESFILE	@CONFFILE@
+#
+# lock file - for communication between modules.
+LOCKFILE	@LOCKFILE@
+#
+# a directory to create temporary files in (ipac creates them in a safe
+# way, hopefully)
+TMPDIR		@TMP@
+#
+# ipfwadm executable (for 2.0.x Kernels only)
+IPFWADM		@IPFWADM@
+#
+# ipchains executable (for 2.1.13 Kernels or later)
+IPCHAINS	@IPCHAINS@
+#
+# mktemp
+MKTEMP		@MKTEMP@
+#
+# awk
+AWK		@AWK@
+#
+# some default image values
+PNG_WIDTH	500
+PNG_HEIGHT	150
+PNG_INDEX_DEFAULT	index.html
+#
+# useful only if you want to debug: if set to no, switches off
+# the stripping of debug code.
+STRIP_DEBUG	yes
+#
+# --- There should not be a need to change lines below this one at all ----
+#
+DATDELIM	@DATDELIM@
+VERSION		@VERSION@
+MANTIME		@MANTIME@
+CH_INNAME	@CH_INNAME@
+CH_OUTNAME      @CH_OUTNAME@
+CH_CTRL_IN      @CH_CTRL_IN@
+CH_CTRL_OUT     @CH_CTRL_OUT@
+IPFWADM_PROC	@IPFWADM_PROC@
+IPCHAINS_PROC_N	@IPCHAINS_PROC_N@
+IPCHAINS_PROC_C	@IPCHAINS_PROC_C@
+#
+STORAGEMETHODS	@STORAGEMETHODS@
+DEFAULT_STORAGE	@DEFAULT_STORAGE@
+RECONFLAG	@RECONFLAG@
+
+DBASE_PORT	@DBASE_PORT@
+DBASE		@DBASE@

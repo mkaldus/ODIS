@@ -1,0 +1,21 @@
+# $Id: Makefile.in,v 1.4 2004/04/18 21:02:37 friedl Exp $
+# Makefile for gdbm
+# NEEDLIBS=-lgdbm
+SMETHOD=gdbm
+CFLAGS=@CFLAGS@
+CC=@CC@
+DEFS=@DEFS@
+
+all: libstor$(SMETHOD).a
+
+libstor$(SMETHOD).a: gdbm.o
+	ar -crus libstor$(SMETHOD).a $?
+
+%.o: %.c ../../config.h ../../ipac.h ipac_gdbm.h
+	$(CC) -c -I. -I../.. $(DEFS) $(CFLAGS) $< -o $@
+
+clean:
+	rm -f libstorgdbm.a gdbm.o
+
+distclean: clean
+	rm -f Makefile *~ *.orig

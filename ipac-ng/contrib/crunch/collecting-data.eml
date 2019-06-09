@@ -1,0 +1,32 @@
+From: "Matthias Lendholt" <matthias dot lendholt at gmx dot de>
+To: <ipac-ng-common@lists.sourceforge.net>
+Subject: [Ipac-ng-common] collecting data of /var/lib/ipac
+Sender: ipac-ng-common-admin@lists.sourceforge.net
+Errors-To: ipac-ng-common-admin@lists.sourceforge.net
+Reply-To: ipac-ng-common@lists.sourceforge.net
+List-Archive: <http://sourceforge.net/mailarchive/forum.php?forum=ipac-ng-common>
+Date: Sat, 6 Nov 2004 11:07:17 +0100
+
+I'm using ipac without a database and it stores all the data in 
+/var/lib/ipac. ipacsum creates one image per flow/rule and since I wanted 
+one image with all flows included, I wrote a perl script which collects the 
+data of /var/lib/ipac and creates a csv file. I don't know it something like 
+that exists anywhere but if someone is interested...
+
+Matthias
+
+-- 
+Gaéð á wyrd swá hío scel! 
+
+
+
+
+-------------------------------------------------------
+This SF.Net email is sponsored by:
+Sybase ASE Linux Express Edition - download now for FREE
+LinuxWorld Reader's Choice Award Winner for best database on Linux.
+http://ads.osdn.com/?ad_id=5588&alloc_id=12065&op=click
+_______________________________________________
+Ipac-ng-common mailing list
+Ipac-ng-common@lists.sourceforge.net
+https://lists.sourceforge.net/lists/listinfo/ipac-ng-common

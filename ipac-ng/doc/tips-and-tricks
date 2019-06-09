@@ -1,0 +1,31 @@
+
+Q: How can I test ipacsum by running if from the source directory without 
+   installing it in the system?
+
+A: Run the following configure command (add other options if needed):
+
+     ./configure --prefix=${PWD%/*} --sbindir='${exec_prefix}'/${PWD##*/} --with-confdir=${PWD}/ipac-ng
+     mkdir ipac-ng
+     make
+
+   Don't forget to put the config files in ./ipac-ng not in /etc/ipac-ng!
+
+   You can now run fetchipac and ipacsum by calling them via 
+   "./fetchipac" and "./ipacsum" respectively.
+
+-------------------------------------------------------------------------------
+
+Q: How can I test a new version of ipacsum without overwriting the currently 
+   installed version? Meaning I want to run it from the source directory but 
+   want to use the configuration files of the currently installed version.
+
+A: Run the following configure command (add other options if needed):
+
+     ./configure --prefix=${PWD%/*} --sbindir='${exec_prefix}'/${PWD##*/}
+     make
+
+   You can now run fetchipac and ipacsum by calling them via 
+   "./fetchipac" and "./ipacsum" respectively.
+
+   Note: This is also a good way of debugging fetchipac because the binary
+         will not be "stripped" this way. 

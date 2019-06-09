@@ -1,0 +1,28 @@
+UPDATING a postgres database from ipac-ng before version 1.27
+=============================================================
+
+
+With version 1.27 the postgres database structure has been changed 
+a little. There is now one more field named 'hostname'.
+
+To do the changes manually run the postgres interactive terminal
+  psql -U ipac ipac
+
+There enter the following commands listed
+
+  DROP INDEX "logs_rule";
+  DROP INDEX "logs_rule_time";
+  DROP INDEX "logs_time";
+  alter table logs add hostname character varying(32);
+  update logs SET hostname = 'router';
+  CREATE  INDEX "logs_rule" ON "logs" ("rule_name");
+  CREATE  UNIQUE INDEX "logs_rule_time" ON "logs" ("rule_name", "that_time");
+  CREATE  INDEX "logs_time" ON "logs" ("that_time");
+
+Replace 'router' with the hostname of your host. Take into account to increase 
+the size of the hostname field from 32 to something bigger if your host's
+hostname is longer than 31 characters. Check the output of the "hostname" command.
+
+It might also be good to install phpPgAdmin - http://phppgadmin.sourceforge.net/
+as it is quite a good webfrontend to your postgres database.
+

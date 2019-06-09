@@ -1,0 +1,35 @@
+
+> ipac.cgi
+
+ipac.cgi is a cgi script by Dan Swan <swan_daniel@hotmail.com>. It is
+meat to be used as a front end to ipacsum and will generate the ipac
+images and index.html page just in time. The page itself is generated
+as normal files, and the browser is redirected to the generated page.
+
+Dan said that there is still a problem concerning refresh of the images -
+some browsers do not refresh images although you hit the refresh button,
+and it seems the HTTP Expires: header line which is used through the
+.asis file mechanism (see ipacsum(8)) does not help at least some times.
+
+However, as he says, the script is functional.
+
+
+
+> ipac_and_mrtg
+
+This directory contains a script, a REAMDE and some example files written
+by Tim Yunaev <tim@lviv.gu.net>. It makes mrtg display data which was
+collected by ipac. mrtg - which had at least be an inspiration for ipac -
+can be found at 
+http://ee-staff.ethz.ch/~oetiker/webtools/mrtg/mrtg.html .
+
+
+
+> suse_rpm
+
+contains files needed to make rpm files for Suse Linux. So long, this
+does not work automatically - you still need to place the files into
+the proper places before calling rpm -ba.
+
+
+Moritz

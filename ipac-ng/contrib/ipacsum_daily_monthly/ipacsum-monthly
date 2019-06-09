@@ -1,0 +1,4 @@
+#!/bin/sh
+test -f /etc/ipac-ng/ipacsummonthly.pl || exit 0
+
+/usr/bin/nice /etc/ipac-ng/ipacsummonthly.pl

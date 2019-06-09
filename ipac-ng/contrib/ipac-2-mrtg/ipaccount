@@ -1,0 +1,37 @@
+#!/usr/bin/perl -w
+#
+# /usr/local/bin/ipaccount
+#
+# ipaccount reads data from ipac-ng logs and updates mrtg log file(s).
+# ipaccount is used with ipac-ng and mrtg to create ip traffic graphs.
+#
+# The "fetchipac" (part of ipac-ng) application creates log files that
+# contain historical IP traffic data depending on rules set in ipac.conf.
+#
+# The mrtg reads data from a unique log file for each "target" ($TARGET.log)
+# The "target" log files depend on rules set in the mrtg.cfg file.
+# mrtg can use this data for creation of graphs.
+#
+# Read ipac-ng and mrtg manuals for more information.
+#########################################################################
+
+$ENV{PATH}="/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin";
+
+die "Usage: ipaccount <relative time> <regexp>\n" if $#ARGV < 1;
+
+@output = `/usr/sbin/ipacsum --exact -s $ARGV[0]`;
+die "Can't execute ipacsum: $!\n" if !defined @output;
+
+$bytesin=0;
+$bytesout=0;
+
+foreach (@output)
+{
+    # Incoming...
+    $bytesin = $1 if (/^[\* ]\s+incoming\s+$ARGV[1]\s+\:\s+(\d+)/);
+
+    # Outgoing...
+    $bytesout = $1 if (/^[* ]\s+outgoing\s+$ARGV[1]\s+\:\s+(\d+)/);
+}
+
+print "$bytesin\n$bytesout\n0\n\n";

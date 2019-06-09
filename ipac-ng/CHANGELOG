@@ -1,0 +1,148 @@
+# $Id: CHANGELOG,v 1.38 2011/11/05 01:25:58 smsoft Exp $
+#
+# description:
+#   (name1/name2) ..... contributed software just got merged
+#   (name1 + name2) ... software got merged and enhanced by developer
+#      name1 = developer
+#      name2 = contributor
+#   (name1,name2) ..... work by the named developer
+#                       no name means most likely that Al Zakharov did it
+#
+# current developers:
+#   kaiser13/az ......... Al Zakharov <kaiser13 at users dot sourceforge dot net>
+#   friedl/fl ........... Friedrich Lobenstock <fl at fl dot priv dot at>
+#   mpoos ............... Mark Spieth <mpoos at users dot sourceforge dot net>
+#   sm ...................Sergey Merzlikin <sm at smsoft dot ru>
+#
+# contributors:
+#   Thomas Zehetbauer <thomasz at hostmaster dot org>
+#   Simon Hausman <simon at lst dot de>
+#   Denis O.Philippov <info at linuxcenter dot ru>
+#   Jason Hudgins <thanatos_101 at yahoo dot com>
+#   Mark Wormgoor.com <mark at wormgoor dot com>
+#   xavier <list.ipac-ng-developer at natch dot dyndns dot org>
+#   Afanasyev Nikolay <ikto at users dot sourceforge dot net>
+#   Robert Evert <crimofbai at web dot de>
+#
+
+known problem(s):
+    * ipactest script reports errors despite everything is 
+      working ok - no fix yet
+    * duplicate tickmarks in generated images can happen, this 
+      is caused by rounding - no fix yet
+    * with storage backend "gdbm" DO NOT call fetchipac twice in the 
+      same second or your database will be destroyed - no fix, other than
+      removing support for gdbm, yet
+    * incorrect parsing of port ranges (port:port) in rules file.
+    * if source/destination in rules file is specified as hostname,
+      and this hostname resolves to multiple ip addresses, the rule
+      is not accepted.
+    * error message doesn't contain rule name if rule parsing error occurs
+
+1.34.2
+- fixed incompatibility with iptables 1.4.11 - 1.4.12.1 (sm)
+- improved configure/build scripts. Now both dynamic (with iptables dynamic
+  libraries) and static (with iptables source) compilation is compatible
+  with iptables 1.4.3 - 1.4.12.1 (sm)
+- updated documentation (sm)
+
+1.34.1
+- fixed incompatibility with some linux distributions which use iptables 1.4.10
+  and later. Confirmed ability to work with iptables 1.4.3 - 1.4.11.1 (with shared
+  iptables libraries, libxtables.so, libiptc.so and libip4tc.so). Static compilation
+  works only with iptables version up to 1.4.9.1, and not in all linux distributions 
+  (due to patched header files) (sm)
+
+1.34
+- ported to iptables 1.4.9.1, works with iptables 1.4.3 - 1.4.9.1, and maybe later (sm)
+- removed a lot of unused code from iptables.c (sm)
+- removed xtables.c, libiptc.c, libip4tc.c and corresponding header files,
+  but instead added dependency on iptables libraries: libxtables.so and libiptc.so (sm)
+- added option to configure script: "--with-iptables-src=" which allows to compile
+  fetchipac statically with iptables source code (as it was in previous versions) (sm)
+- added ipacsumdaily/monthly perl scripts to contrib directory (sm)
+- updated documentation (sm)
+
+1.33
+- ported to iptables 1.4.2 (mdw21)
+
+1.32
+- added new options "--png-sort-by-bytes" and "--png-sort-by-pkts" (friedl/xavier)
+- invmatch patch added to contrib (friedl/Afanasyev Nikolay)
+- addsql alpha added to contrib (friedl/Robert Evert)
+
+1.31
+- force -H/-hostname when -r/--replace is used as option to ipacsum (friedl/Mark Wormgoor)
+- mysql with fixed when port not specified in ipac.conf (friedl)
+- documented the fact that '_' breaks configfile parser and is therefore
+  not allowed in the database connection information (friedl)
+- improved upgrade procedure for version<1.27 (friedl)
+- mysql table definition file added to doc/ (friedl)
+- added patch to fix problem in ipacsum with big numbers (friedl + Jason Hudgins)
+- added mysql support (friedl/Denis O.Philippov)
+- changed some error messages to be different when they apply 
+  in different situations
+
+1.30
+- fixed a bug when running "fetchipac -Svv" (friedl)
+- fixed the "%chain% name" chain creation bug (friedl)
+- improve checking of storage backend libraries and error reporting 
+  when not found (friedl)
+- fixed an obviously very old bug in combination with an unusual 
+  installation of the postgres include files (friedl)
+
+1.29
+- in case of the sqlite database the database file will be placed at 
+  /var/lib/ipac with the selected database name plus the suffix ".db" (friedl)
+- added support for the sqlite database backend (friedl/Simon Hausman)
+- factor out common code for all sql backends (friedl + Simon Hausman)
+
+1.28
+- fixed the unspooling problem that creeped in during 1.28 (friedl)
+- non classic mode removed
+- make ipac-ng compile on 64 bit, also checked gdbm storage (friedl/Thomas Zehetbauer)
+- put some documentation together in the doc/ subdirectory (friedl)
+- the never documented webinterface is gone now (kaiser13, friedl)
+- reduce worst case memory usage with huge database of >= 4GB to about 1.2GB (friedl)
+- logging of database debug messages improved (friedl)
+- add option '--enable-debug-database' to configure (friedl)
+- add option '--human-kilo' to ipacsum, the default now is 1K=1024 (friedl)
+- make it compile with older gcc's, move variable declarations
+  to the start of the function (friedl)
+- make INSTALLPATH completely controllable by configure, no
+  hardcoded prefix/sbin anymore (friedl)
+- memory appetite of fetchipac reduced greatly
+- bigint changed to int in sql
+- storage/postgre/postgre.c results from all PQexec's is now handled
+- contrib/sample_configs/ipac.conf small documentation changes (friedl)
+- storage/postgre/postgre.c possible logging bug fixed (friedl)
+- storage/postgre/postgre.c reformated (friedl)
+- storage/postgre/postgre.c added some errorhandling
+- implemented support of iptables extensions
+- removed old options from ./configure
+- ipac-convert now installs correctly
+- make clean was fixed to remove all binary files
+- configure fails in case no bison or flex found
+- new rules file parser
+- new rules file format introduced
+
+1.27
+- compile problem with no postgresql has been fixed
+- gdbm storage problem introduced in 1.26 has been fixed
+- default config file has been corrected
+
+1.26
+- added support for multiple accounting hosts (see -H options to fetchipac and ipacsum)
+- fetching speedup
+- new word 'hostname' in config
+- access agent name 'postg' changed to 'postgre'
+- old configs samples were removed
+- minor changes in database structure (read UPDATE-1.26)
+- postgre is now the recommended storage
+
+1.25
+- batchmode was fixed again
+- added ipac-2-mrtg contrib section
+- compile problems with gcc 3.2 were solved
+- runfile parsing with ipchains has been fixed
+- other little fixes

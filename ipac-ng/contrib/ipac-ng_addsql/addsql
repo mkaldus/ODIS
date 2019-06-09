@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# MySQL add User & Databases for ipac-ng
+# created fast by robert
+
+
+## Possibly its needed to modify the Path to the ipac.conf
+conf=/etc/ipac-ng/ipac.conf
+
+
+# come out mysql ;)
+meisql=`which mysql`
+
+while [ "$#" -gt 0 ] ; do
+
+ case $1 in
+	 --add)
+         add=0
+         shift
+          ;;
+
+	-p)
+	 pw=$2
+	 shift
+	 shift
+	  ;;
+	-u)
+	 user=$2
+	 shift
+	 shift
+	 ;;
+	-db)
+         dbname=$2
+         shift
+         shift
+         ;;
+	--mysqluser)
+         mysqluser=$2
+         shift
+         shift
+         ;;
+        --mysqlpw)
+         mysqlpw=$2
+         shift
+         shift
+         ;;
+	-R)
+         reverse=0
+         shift
+         
+         ;;
+	--help)
+	 echo -e "Add MySQL entries for ipac-ng 1.31 \n Usage: \n \
+		--help - Display this message ;) \n \
+		--add - Tells the Script to really Install ipac-ng with Mysql \n \
+		-u - the User for the DataBase \n \
+		-p - the Password for the User \n \
+		-db - the Name of the Database	\n \
+		--mysqluser - an MySQL User that is allowed to create Users and Databases \n \
+		--mysqlpw - the Password for that user, a prompt is not yet supported \n \
+		-R - Reverse all Actions. This deletes the ipac-ng MySQL Database, User and sets the Config back to the Old. In this Version you have to use all the Options you used when creating."
+        exit
+	;;
+	*)
+	echo "Usage: $0 (--help) (--add [IMPORTANT] ) (-u user) (-p password) (-db DBNAME) (--mysqluser MYSQLUSER) (--mysqlpw MYSQLPASSWORD) (-R)"
+	exit
+	;;
+ esac
+done
+
+# test some things and set them to default values if they are not present
+
+# set to ipac5 for home testing
+
+if [ ! $user ] ; then
+ user=ipac5
+fi
+if [ ! $dbname ] ; then
+ dbname=ipac5
+fi
+if [ ! $pw  ] ; then
+ pw=ipac
+fi
+if [ $mysqluser ] ; then
+ a='-u'
+else
+ a=''
+fi
+if [ $mysqlpw ] ; then
+ b='-p'
+else
+ b=''
+fi
+
+################  for removing the database
+
+if [ "$reverse" = "0" ] ; then
+
+echo "You've got 10 secs to abort with ctr-c, otherwise the ipac DBs will be erased!"
+sleep 10
+
+$meisql $a $mysqluser $b$mysqlpw << EOF
+
+DROP DATABASE $dbname ;
+
+use mysql;
+
+DELETE FROM user WHERE User = '$user' AND Host = 'localhost';
+DELETE FROM db WHERE User = '$user' AND Host = 'localhost';
+DELETE FROM tables_priv WHERE User = '$user' AND Host = 'localhost';
+DELETE FROM columns_priv WHERE User = '$user' AND Host = 'localhost';
+
+EOF
+
+mv $conf.old $conf
+
+exit 0
+
+else
+
+############# ADD the User and the Database!
+
+if [ "$add" = "0" ] ; then
+
+
+$meisql $a $mysqluser $b$mysqlpw << EOF
+
+GRANT SELECT , INSERT , UPDATE , DELETE , FILE ON $dbname . * TO "$user"@"localhost"IDENTIFIED BY "$pw";
+CREATE DATABASE $dbname ;
+use $dbname
+
+CREATE TABLE logs (
+  that_time bigint(20) NOT NULL default '0',
+  rule_name varchar(128) NOT NULL default '',
+  bytes bigint(20) default NULL,
+  pkts bigint(20) default NULL,
+  hostname varchar(64) default NULL,
+  PRIMARY KEY  (that_time,rule_name)
+) TYPE=MyISAM;
+
+EOF
+
+if [ ! `whoami` = root ] ; then
+echo "You shall be root edit the config!"
+else
+test -f $conf
+ if [ $? -eq 0 ] ; then
+  cp $conf $conf.old
+  sed s/"storage =.*"/"storage = mysql"/g < $conf > $conf.temp
+  sed s/"db name =.*"/"db name = $dbname"/g < $conf.temp > $conf
+  sed s/"db user =.*"/"db user = $user"/g < $conf > $conf.temp
+  sed s/"db pass =.*"/"db pass = \"$pw\""/g < $conf.temp > $conf
+  
+ else
+  echo "Couldn't find ipac-ng Config File, maybe you didn't properly edited the first 3rd line of this Script or didn't used something like the Standard Config?"
+ fi 
+fi
+else
+ echo "Usage: $0 (--help) (--add [IMPORTANT])  (-u user) (-p password) (-db DBNAME) (--mysqluser MYSQLUSER) (--mysqlpw MYSQLPASSWORD) (-R)"
+
+fi
+fi
